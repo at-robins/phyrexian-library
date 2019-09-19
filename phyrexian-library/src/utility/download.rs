@@ -1,3 +1,8 @@
+//!
+//! The 'phyrexian_library::utility::download' module contains a rudimentary download manager for 
+//! asynchronous download of files via HTTP or HTTPS.
+//! 
+
 extern crate reqwest;
 extern crate serde_json;
 extern crate rayon;
@@ -14,6 +19,10 @@ use reqwest::header::{CONTENT_LENGTH, RANGE};
 use reqwest::StatusCode;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 
+///
+/// The number of threads per DownloadManager instance.
+/// This corresponds to the maximum number of simultanious downloads a manager can perform.
+/// 
 const DOWNLOAD_MANAGER_NUMBER_OF_THREADS: usize = 4;
 
 ///
@@ -30,7 +39,11 @@ impl<'a> DownloadManager<'a> {
     /// 
     /// # Examples
     /// ```
-    /// let download_mamager = phyrexian_library::DownloadManager::new().unwrap();
+    /// if let Ok(download_manager) = phyrexian_library::utility::download::DownloadManager::new() {
+    ///     // Download stuff.
+    /// } else {
+    ///     // Some error handling.
+    /// };
     /// ```
     /// 
     /// # Errors
