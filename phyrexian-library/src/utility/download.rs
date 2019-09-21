@@ -1,7 +1,5 @@
-//!
-//! The 'phyrexian_library::utility::download' module contains a rudimentary download manager for 
+//! The `download` module contains a rudimentary download manager for 
 //! asynchronous download of files via HTTP or HTTPS.
-//! 
 
 extern crate reqwest;
 extern crate serde_json;
@@ -19,27 +17,24 @@ use reqwest::header::{CONTENT_LENGTH, RANGE};
 use reqwest::StatusCode;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 
-///
 /// The number of threads per DownloadManager instance.
 /// This corresponds to the maximum number of simultanious downloads a manager can perform.
-/// 
 const DOWNLOAD_MANAGER_NUMBER_OF_THREADS: usize = 4;
 
-///
 /// A manager for asynchronous download of files via HTTP and HTTPS.
-/// 
 pub struct DownloadManager<'a> {
     pool: ThreadPool,
     downloads: HashMap<&'a Path, Arc<Mutex<Download>>>,
 }
 
 impl<'a> DownloadManager<'a> {
-    /// 
-    /// Creates a new DownloadManager instance.
+    /// Creates a new `DownloadManager`.
     /// 
     /// # Examples
     /// ```
-    /// if let Ok(download_manager) = phyrexian_library::utility::download::DownloadManager::new() {
+    /// use phyrexian_library::utility::download::DownloadManager;
+    /// 
+    /// if let Ok(download_manager) = DownloadManager::new() {
     ///     // Download stuff.
     /// } else {
     ///     // Some error handling.
@@ -48,7 +43,6 @@ impl<'a> DownloadManager<'a> {
     /// 
     /// # Errors
     /// Returns an error if creation of the underlying thread pool failed.
-    /// 
     pub fn new() -> Result<DownloadManager<'a>, ThreadPoolBuildError> {
         Ok(DownloadManager{
             pool: ThreadPoolBuilder::new().num_threads(DOWNLOAD_MANAGER_NUMBER_OF_THREADS).build()?,
@@ -56,17 +50,25 @@ impl<'a> DownloadManager<'a> {
         })
     }
     
+    /// Returns a [`DownloadProxy`] of the download for the specified file if any.
+    /// The object allows interaction with the underlying [`Download`].
+    /// 
+    /// # Argumetns
+    /// 
+    /// * `path_to_output_file` - The path to the output file of a download.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    /// [`DownloadProxy`]: ./struct.DownloadProxy.html
     pub fn get_download(&self, path_to_output_file: &Path) -> Option<DownloadProxy>{
         self.downloads.get(path_to_output_file).map(|val| DownloadProxy{download: Arc::clone(&val)})
     }
     
-    ///
-    /// Downloads a file via HTTP or HTTPS. Returns a Download, which reflects the state of the download process. 
+    /// Downloads a file via HTTP or HTTPS. The progress of the download can be tracked via the `DownloadManager`.
     /// 
     /// # Arguments
-    /// * `link` - A URL to a file for downloading.
-    /// * `output` - A path specifying the file to which the downloaded data is written.
     /// 
+    /// * `link` - A URL to a file, which should be downloaded.
+    /// * `output` - A path specifying the file to which the downloaded data is written.
     pub fn download<U>(&mut self, link: U, output: &'static Path)
         where U: reqwest::IntoUrl + Send + 'static {
         let download: Arc<Mutex<Download>> = Arc::new(Mutex::new(Download::pending()));
@@ -75,17 +77,46 @@ impl<'a> DownloadManager<'a> {
     }
 }
 
+/// An `enum` indicating the current status of a [`Download`].
+/// 
+/// [`Download`]: ./struct.Download.html
 #[derive(Debug)]
-pub enum DownloadStatus {
+enum DownloadStatus {
+    /// The download was completed without errors.
     Successful,
+    /// The download failed due to the specified error.
     Failed(Arc<dyn std::error::Error + Send + Sync>),
+    /// The download is currently running or waiting to be started.
     Pending
 }
 
 impl DownloadStatus {
+    /// Returns `true` if the status is a [`Pending`] value.
+    ///
+    /// [`Pending`]: #variant.Pending
     fn is_pending(&self) -> bool {
         match self {
             DownloadStatus::Pending => true,
+            _ => false,
+        }
+    }
+    
+    /// Returns `true` if the status is a [`Successful`] value.
+    ///
+    /// [`Successful`]: #variant.Successful
+    fn is_successful(&self) -> bool {
+        match self {
+            DownloadStatus::Successful => true,
+            _ => false,
+        }
+    }
+    
+    /// Returns `true` if the status is a [`Failed`] value.
+    ///
+    /// [`Failed`]: #variant.Failed
+    fn is_failed(&self) -> bool {
+        match self {
+            DownloadStatus::Failed(_) => true,
             _ => false,
         }
     }
@@ -137,8 +168,37 @@ pub struct DownloadProxy {
 }
 
 impl DownloadProxy {
+    /// Returns `true` if the download is waiting to be started or currently performed.
+    /// 
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
     pub fn is_pending(&self) -> Result<bool, PoisonError<MutexGuard<Download>>> {
         self.download.lock().map(|val| val.status.is_pending())
+    }
+    
+    /// Returns `true` if the download was completed without errors.
+    /// 
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    pub fn is_successful(&self) -> Result<bool, PoisonError<MutexGuard<Download>>> {
+        self.download.lock().map(|val| val.status.is_successful())
+    }
+    
+    /// Returns `true` if the download did fail due to an error.
+    /// 
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    pub fn is_failed(&self) -> Result<bool, PoisonError<MutexGuard<Download>>> {
+        self.download.lock().map(|val| val.status.is_failed())
     }
     
     pub fn get_error(&self) -> Result<Option<Arc<dyn std::error::Error + Send + Sync>>, PoisonError<MutexGuard<Download>>> {
@@ -190,7 +250,12 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
         return
     }
     
-    let mut dl_file = match OpenOptions::new().read(true).write(true).create(true).append(false).open(output) {
+    let mut dl_file = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .append(false)
+        .open(output) {
         Ok(file) => file,
         Err(err) => {
             fail_download(err, download);
@@ -231,7 +296,7 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
     println!("{:?}: Finished download.", output);
 }
 
-fn fail_download<E>(failure: E, download: Arc<Mutex<Download>>) where E: std::error::Error + Send + Sync + 'static{
+fn fail_download<E>(failure: E, download: Arc<Mutex<Download>>) where E: std::error::Error + Send + Sync + 'static {
     if let Ok(mut lock) = download.lock() {
         lock.status = DownloadStatus::Failed(Arc::new(failure));
     }
@@ -280,7 +345,7 @@ struct PartialRangeIter {
 
 impl PartialRangeIter {
     
-        fn new(starting_value: u32, max_value: u32, chunk_size: u32) -> PartialRangeIter {
+    fn new(starting_value: u32, max_value: u32, chunk_size: u32) -> PartialRangeIter {
         PartialRangeIter{
             chunk_size,
             max_length: max_value,
@@ -335,4 +400,43 @@ mod test {
         assert_eq!(range_iter.collect::<Vec<String>>(), range);
     }
     
+    #[test]
+    fn test_download_status_is_pending() {
+        let status: DownloadStatus = DownloadStatus::Pending;
+        assert_eq!(status.is_pending(), true);
+        
+        let status: DownloadStatus = DownloadStatus::Successful;
+        assert_eq!(status.is_pending(), false);
+        
+        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        assert_eq!(status.is_pending(), false);
+    }
+    
+    #[test]
+    fn test_download_status_is_successful() {
+        let status: DownloadStatus = DownloadStatus::Pending;
+        assert_eq!(status.is_successful(), false);
+        
+        let status: DownloadStatus = DownloadStatus::Successful;
+        assert_eq!(status.is_successful(), true);
+        
+        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        assert_eq!(status.is_successful(), false);
+    }
+    
+    #[test]
+    fn test_download_status_is_failed() {
+        let status: DownloadStatus = DownloadStatus::Pending;
+        assert_eq!(status.is_failed(), false);
+        
+        let status: DownloadStatus = DownloadStatus::Successful;
+        assert_eq!(status.is_failed(), false);
+        
+        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        assert_eq!(status.is_failed(), true);
+    }
+
 }
