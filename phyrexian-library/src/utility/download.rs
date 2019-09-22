@@ -77,6 +77,28 @@ impl<'a> DownloadManager<'a> {
     }
 }
 
+/// An enum containing all the potential errors that may occur during a download.
+#[derive(Debug)]
+pub enum DownloadError {
+    /// An IO error, creating and modifiying a local file.
+    IoError(std::io::Error),
+    /// A reqwest error, related to URL parsing and web interaction.
+    ReqwestError(reqwest::Error),
+}
+
+impl From<std::io::Error> for DownloadError {
+    fn from(error: std::io::Error) -> Self {
+        DownloadError::IoError(error)
+    }
+}
+
+impl From<reqwest::Error> for DownloadError {
+    fn from(error: reqwest::Error) -> Self {
+        DownloadError::ReqwestError(error)
+    }
+}
+
+
 /// An `enum` indicating the current status of a [`Download`].
 /// 
 /// [`Download`]: ./struct.Download.html
@@ -85,7 +107,7 @@ enum DownloadStatus {
     /// The download was completed without errors.
     Successful,
     /// The download failed due to the specified error.
-    Failed(Arc<dyn std::error::Error + Send + Sync>),
+    Failed(Arc<DownloadError>),
     /// The download is currently running or waiting to be started.
     Pending
 }
@@ -121,7 +143,7 @@ impl DownloadStatus {
         }
     }
     
-    fn get_error(&self) -> Option<Arc<dyn std::error::Error + Send + Sync>> {
+    fn get_error(&self) -> Option<Arc<DownloadError>> {
         match self {
             DownloadStatus::Failed(ref err) => Some(Arc::clone(err)),
             _ => None,
@@ -136,6 +158,18 @@ impl Display for DownloadStatus {
             DownloadStatus::Failed(ref err) => write!(f, "Failed({:?})", err),
             DownloadStatus::Pending => write!(f, "Pending"),
         }
+    }
+}
+
+impl From<std::io::Error> for DownloadStatus {
+    fn from(error: std::io::Error) -> Self {
+        DownloadStatus::Failed(Arc::new(DownloadError::from(error)))
+    }
+}
+
+impl From<reqwest::Error> for DownloadStatus {
+    fn from(error: reqwest::Error) -> Self {
+        DownloadStatus::Failed(Arc::new(DownloadError::from(error)))
     }
 }
 
@@ -201,7 +235,7 @@ impl DownloadProxy {
         self.download.lock().map(|val| val.status.is_failed())
     }
     
-    pub fn get_error(&self) -> Result<Option<Arc<dyn std::error::Error + Send + Sync>>, PoisonError<MutexGuard<Download>>> {
+    pub fn get_error(&self) -> Result<Option<Arc<DownloadError>>, PoisonError<MutexGuard<Download>>> {
          self.download.lock().map(|val| val.status.get_error())
     }
     
@@ -225,7 +259,7 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
     let url = match link.into_url() {
         Ok(url) => url,
         Err(err) => {
-            fail_download(err, download);
+            fail_download(DownloadError::from(err), download);
             return
         },
     };
@@ -233,20 +267,20 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
     let mut response =  match reqwest::get(url) {
         Ok(resp) => resp,
         Err(err) => {
-            fail_download(err, download);
+            fail_download(DownloadError::from(err), download);
             return
         },
     };
     
     if output.is_dir() {
-        fail_download(std::io::Error::new(std::io::ErrorKind::InvalidInput, 
-            format!("{:?} is a folder, not a file.", output)), download);
+        fail_download(DownloadError::from(std::io::Error::new(std::io::ErrorKind::InvalidInput, 
+            format!("{:?} is a folder, not a file.", output))), download);
         return
     }
     
     let parent_path = output.parent().expect("This cannot fail as the download path must point to a file.");
     if let Err(err) = fs::create_dir_all(parent_path) {
-        fail_download(err, download);
+        fail_download(DownloadError::from(err), download);
         return
     }
     
@@ -258,7 +292,7 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
         .open(output) {
         Ok(file) => file,
         Err(err) => {
-            fail_download(err, download);
+            fail_download(DownloadError::from(err), download);
             return
         },
     };
@@ -277,12 +311,12 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
             Ok(len) => len,
             Err(ref err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(err) => {
-                fail_download(err, download);
+                fail_download(DownloadError::from(err), download);
                 return
             },
         };
         if let Err(err) = dl_file.write_all(&buf[..len]) {
-            fail_download(err, download);
+            fail_download(DownloadError::from(err), download);
             return
         };
         written += len as u32;
@@ -296,7 +330,7 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
     println!("{:?}: Finished download.", output);
 }
 
-fn fail_download<E>(failure: E, download: Arc<Mutex<Download>>) where E: std::error::Error + Send + Sync + 'static {
+fn fail_download(failure: DownloadError, download: Arc<Mutex<Download>>) {
     if let Ok(mut lock) = download.lock() {
         lock.status = DownloadStatus::Failed(Arc::new(failure));
     }
@@ -409,7 +443,7 @@ mod test {
         assert_eq!(status.is_pending(), false);
         
         let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_pending(), false);
     }
     
@@ -422,7 +456,7 @@ mod test {
         assert_eq!(status.is_successful(), true);
         
         let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_successful(), false);
     }
     
@@ -435,8 +469,21 @@ mod test {
         assert_eq!(status.is_failed(), false);
         
         let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::Failed(Arc::new(err));
+        let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_failed(), true);
+    }
+    
+    #[test]
+    fn test_download_status_get_error() {
+        use std::error::Error;
+        let error_description = "This is a test error.";
+        let err = Arc::new(DownloadError::from(std::io::Error::new(std::io::ErrorKind::InvalidInput, error_description)));
+        let status = DownloadStatus::Failed(Arc::clone(&err));
+        match *status.get_error().expect("There must be an error.") {
+            DownloadError::IoError(ref err) if err.kind() == std::io::ErrorKind::InvalidInput && err.description() == error_description => {},
+            DownloadError::IoError(ref err) => panic!("{:?} is not the correct error.", err),
+            DownloadError::ReqwestError(ref err) => panic!("{:?} is not the correct error.", err),
+        }
     }
 
 }
