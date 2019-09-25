@@ -8,6 +8,7 @@ extern crate rayon;
 use core::fmt::Display;
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc, PoisonError, MutexGuard};
+use std::io;
 use std::io::{Write, Read};
 use std::convert::TryInto;
 use std::fs::{self, File, OpenOptions};
@@ -81,13 +82,13 @@ impl<'a> DownloadManager<'a> {
 #[derive(Debug)]
 pub enum DownloadError {
     /// An IO error, creating and modifiying a local file.
-    IoError(std::io::Error),
+    IoError(io::Error),
     /// A reqwest error, related to URL parsing and web interaction.
     ReqwestError(reqwest::Error),
 }
 
-impl From<std::io::Error> for DownloadError {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for DownloadError {
+    fn from(error: io::Error) -> Self {
         DownloadError::IoError(error)
     }
 }
@@ -143,6 +144,11 @@ impl DownloadStatus {
         }
     }
     
+    /// Returns the error cause of a failed [`Download`] if applicable.
+    /// Returns `None` if the [`Download`] did not fail.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    /// [`None`]: https://doc.rust-lang.org/std/option/enum.Option.html#variant.None
     fn get_error(&self) -> Option<Arc<DownloadError>> {
         match self {
             DownloadStatus::Failed(ref err) => Some(Arc::clone(err)),
@@ -161,8 +167,8 @@ impl Display for DownloadStatus {
     }
 }
 
-impl From<std::io::Error> for DownloadStatus {
-    fn from(error: std::io::Error) -> Self {
+impl From<io::Error> for DownloadStatus {
+    fn from(error: io::Error) -> Self {
         DownloadStatus::Failed(Arc::new(DownloadError::from(error)))
     }
 }
@@ -176,15 +182,17 @@ impl From<reqwest::Error> for DownloadStatus {
 #[derive(Debug)]
 pub struct Download {
     status: DownloadStatus,
-    downloaded_size: u32,
+    downloaded_size: u64,
+    total_size: Option<u64>,
 }
 
 impl Download {
+    /// Creates a new pending download instance.
     fn pending() -> Self {
-        Download{status: DownloadStatus::Pending, downloaded_size: 0}
+        Download{status: DownloadStatus::Pending, downloaded_size: 0, total_size: None}
     }
     
-    fn get_downloaded_size(&self) -> u32 {
+    fn get_downloaded_size(&self) -> u64 {
         self.downloaded_size
     }
 }
@@ -239,7 +247,7 @@ impl DownloadProxy {
          self.download.lock().map(|val| val.status.get_error())
     }
     
-    pub fn get_downloaded_size(&self) -> Result<u32, PoisonError<MutexGuard<Download>>> {
+    pub fn get_downloaded_size(&self) -> Result<u64, PoisonError<MutexGuard<Download>>> {
          self.download.lock().map(|val| val.get_downloaded_size())
     }
 }
@@ -272,8 +280,24 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
         },
     };
     
+    if let Some(Ok(Ok(length))) = response
+        .headers()
+        .get(CONTENT_LENGTH)
+        .map(|l| {
+            l.to_str().map(|ll| u64::from_str(ll))
+         }) {
+            if let Ok(mut dl) = download.lock() {
+                dl.total_size = Some(length);
+            } else {
+                /*
+                 * TODO: Some propper error handling in case lock() fails.
+                 */
+                return
+            }
+            
+    }
     if output.is_dir() {
-        fail_download(DownloadError::from(std::io::Error::new(std::io::ErrorKind::InvalidInput, 
+        fail_download(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, 
             format!("{:?} is a folder, not a file.", output))), download);
         return
     }
@@ -297,19 +321,19 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
         },
     };
     let mut buf = [0; 128 * 1024];
-    let mut written = 0u32;
+    let mut written = 0usize;
     let mut written_update = 0;
     let mut t_start = std::time::SystemTime::now();
     loop {
         if t_start.elapsed().unwrap() >= std::time::Duration::from_secs(3) {
-            println!("{:?}: {} MB [{} MB/sec]", output, (written / 1024 / 1024), (f64::from(written - written_update) /1024.0/1024.0/ (t_start.elapsed().unwrap().as_secs() as f64)));
+            //println!("{:?}: {} MB [{} MB/sec]", output, (written / 1024 / 1024), (f64::from(written - written_update) /1024.0/1024.0/ (t_start.elapsed().unwrap().as_secs() as f64)));
             t_start = std::time::SystemTime::now();
             written_update = written;
         }
         let len = match response.read(&mut buf) {
             Ok(0) => break,  // EOF.
             Ok(len) => len,
-            Err(ref err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
             Err(err) => {
                 fail_download(DownloadError::from(err), download);
                 return
@@ -319,9 +343,9 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
             fail_download(DownloadError::from(err), download);
             return
         };
-        written += len as u32;
+        written += len;
         if let Ok(mut lock) = download.lock() {
-            lock.downloaded_size = written;
+            lock.downloaded_size = written  as u64;
         }
     }
     if let Ok(mut lock) = download.lock() {
@@ -362,7 +386,7 @@ pub fn download_chunks(url: reqwest::Url) -> Result<(), Box<dyn std::error::Erro
             println!("Unexpected server response: {}", status)
         }
 
-        std::io::copy(&mut response, &mut output_file)?;
+        io::copy(&mut response, &mut output_file)?;
     }
 
     println!("Finished with success!");
@@ -442,7 +466,7 @@ mod test {
         let status: DownloadStatus = DownloadStatus::Successful;
         assert_eq!(status.is_pending(), false);
         
-        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
         let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_pending(), false);
     }
@@ -455,7 +479,7 @@ mod test {
         let status: DownloadStatus = DownloadStatus::Successful;
         assert_eq!(status.is_successful(), true);
         
-        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
         let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_successful(), false);
     }
@@ -468,7 +492,7 @@ mod test {
         let status: DownloadStatus = DownloadStatus::Successful;
         assert_eq!(status.is_failed(), false);
         
-        let err = std::io::Error::new(std::io::ErrorKind::InvalidInput, "This is a test error.");
+        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
         let status: DownloadStatus = DownloadStatus::from(err);
         assert_eq!(status.is_failed(), true);
     }
@@ -477,10 +501,10 @@ mod test {
     fn test_download_status_get_error() {
         use std::error::Error;
         let error_description = "This is a test error.";
-        let err = Arc::new(DownloadError::from(std::io::Error::new(std::io::ErrorKind::InvalidInput, error_description)));
+        let err = Arc::new(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, error_description)));
         let status = DownloadStatus::Failed(Arc::clone(&err));
         match *status.get_error().expect("There must be an error.") {
-            DownloadError::IoError(ref err) if err.kind() == std::io::ErrorKind::InvalidInput && err.description() == error_description => {},
+            DownloadError::IoError(ref err) if err.kind() == io::ErrorKind::InvalidInput && err.description() == error_description => {},
             DownloadError::IoError(ref err) => panic!("{:?} is not the correct error.", err),
             DownloadError::ReqwestError(ref err) => panic!("{:?} is not the correct error.", err),
         }
