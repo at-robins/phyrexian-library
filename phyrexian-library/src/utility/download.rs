@@ -5,6 +5,7 @@ extern crate reqwest;
 extern crate serde_json;
 extern crate rayon;
 
+use core::hash::Hash;
 use core::fmt::Display;
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc, PoisonError, MutexGuard};
@@ -13,7 +14,7 @@ use std::io::{Write, Read};
 use std::convert::TryInto;
 use std::fs::{self, File, OpenOptions};
 use std::str::FromStr;
-use std::path::{Path};
+use std::path::{Path, PathBuf};
 use reqwest::header::{CONTENT_LENGTH, RANGE};
 use reqwest::StatusCode;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
@@ -23,12 +24,12 @@ use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 const DOWNLOAD_MANAGER_NUMBER_OF_THREADS: usize = 4;
 
 /// A manager for asynchronous download of files via HTTP and HTTPS.
-pub struct DownloadManager<'a> {
+pub struct DownloadManager {
     pool: ThreadPool,
-    downloads: HashMap<&'a Path, Arc<Mutex<Download>>>,
+    downloads: HashMap<Arc<PathBuf>, Arc<Mutex<Download>>>,
 }
 
-impl<'a> DownloadManager<'a> {
+impl DownloadManager {
     /// Creates a new `DownloadManager`.
     /// 
     /// # Examples
@@ -44,7 +45,7 @@ impl<'a> DownloadManager<'a> {
     /// 
     /// # Errors
     /// Returns an error if creation of the underlying thread pool failed.
-    pub fn new() -> Result<DownloadManager<'a>, ThreadPoolBuildError> {
+    pub fn new() -> Result<DownloadManager, ThreadPoolBuildError> {
         Ok(DownloadManager{
             pool: ThreadPoolBuilder::new().num_threads(DOWNLOAD_MANAGER_NUMBER_OF_THREADS).build()?,
             downloads: HashMap::new(),
@@ -60,7 +61,7 @@ impl<'a> DownloadManager<'a> {
     /// 
     /// [`Download`]: ./struct.Download.html
     /// [`DownloadProxy`]: ./struct.DownloadProxy.html
-    pub fn get_download(&self, path_to_output_file: &Path) -> Option<DownloadProxy>{
+    pub fn get_download(&self, path_to_output_file: &PathBuf) -> Option<DownloadProxy>{
         self.downloads.get(path_to_output_file).map(|val| DownloadProxy{download: Arc::clone(&val)})
     }
     
@@ -70,11 +71,23 @@ impl<'a> DownloadManager<'a> {
     /// 
     /// * `link` - A URL to a file, which should be downloaded.
     /// * `output` - A path specifying the file to which the downloaded data is written.
-    pub fn download<U>(&mut self, link: U, output: &'static Path)
-        where U: reqwest::IntoUrl + Send + 'static {
+    pub fn download<U>(&mut self, link: U, output: Arc<PathBuf>)
+        where U: reqwest::IntoUrl + Send + 'static/*, 
+        P: AsRef<Path> + Send + 'static*/ {
         let download: Arc<Mutex<Download>> = Arc::new(Mutex::new(Download::pending()));
-        self.downloads.insert(output, Arc::clone(&download));
+        //let output_path: PathBuf = output.into();
+        //self.insert_pathbuf(output, Arc::clone(&download));
+        
+        self.downloads.insert(Arc::clone(&output), Arc::clone(&download));
         self.pool.spawn(move || {download_to_file(link, output, download);});
+    }
+    
+    pub fn print_all(&self) {
+        for val in self.downloads.values() {
+            if let Ok(d) = val.lock() {
+                println!("{}", d);
+            }
+        }
     }
 }
 
@@ -261,7 +274,7 @@ impl Display for DownloadProxy {
     }
 }
 
-fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
+fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Download>>)
     where U: reqwest::IntoUrl {
     println!("{:?}: Started download.", output);
     let url = match link.into_url() {
@@ -279,6 +292,13 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
             return
         },
     };
+    
+    if !response.status().is_success() {
+        // TODO: Custom error
+        fail_download(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, 
+            format!("{:?} status code.", response.status()))), download);
+        return
+    }
     
     if let Some(Ok(Ok(length))) = response
         .headers()
@@ -313,7 +333,7 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
         .write(true)
         .create(true)
         .append(false)
-        .open(output) {
+        .open(output.as_path()) {
         Ok(file) => file,
         Err(err) => {
             fail_download(DownloadError::from(err), download);
@@ -351,7 +371,6 @@ fn download_to_file<U>(link: U, output: &Path, download: Arc<Mutex<Download>>)
     if let Ok(mut lock) = download.lock() {
         lock.status = DownloadStatus::Successful;
     }
-    println!("{:?}: Finished download.", output);
 }
 
 fn fail_download(failure: DownloadError, download: Arc<Mutex<Download>>) {
