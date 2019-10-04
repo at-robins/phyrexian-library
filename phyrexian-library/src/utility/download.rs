@@ -5,7 +5,6 @@ extern crate reqwest;
 extern crate serde_json;
 extern crate rayon;
 
-use core::hash::Hash;
 use core::fmt::Display;
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc, PoisonError, MutexGuard};
@@ -14,7 +13,7 @@ use std::io::{Write, Read};
 use std::convert::TryInto;
 use std::fs::{self, File, OpenOptions};
 use std::str::FromStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use reqwest::header::{CONTENT_LENGTH, RANGE};
 use reqwest::StatusCode;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
@@ -82,13 +81,38 @@ impl DownloadManager {
         self.pool.spawn(move || {download_to_file(link, output, download);});
     }
     
-    pub fn print_all(&self) {
+    /// Returns `true` if pending or running downloads are present. Returns `false` if 
+    /// downloads were either completed successfully or did fail.
+    pub fn has_active(&self) -> bool {
         for val in self.downloads.values() {
             if let Ok(d) = val.lock() {
-                println!("{}", d);
+                match &d.status {
+                    DownloadStatus::Pending => return true,
+                    DownloadStatus::Running => return true,
+                    _ => {},
+                }
             }
         }
+        false
     }
+    
+    /*pub fn print_all(&self) {
+        let mut success = 0;
+        let mut pending = 0;
+        let mut failures = 0;
+        let mut running = 0;
+        for val in self.downloads.values() {
+            if let Ok(d) = val.lock() {
+                match &d.status {
+                    DownloadStatus::Successful => success += 1,
+                    DownloadStatus::Pending => pending += 1,
+                    DownloadStatus::Running => running += 1,
+                    DownloadStatus::Failed(_) => failures += 1,
+                }
+            }
+        }
+        println!("Success: {}\nRunning: {}\nPending: {}\nFailed: {}", success, running, pending, failures);
+    }*/
 }
 
 /// An enum containing all the potential errors that may occur during a download.
@@ -122,8 +146,10 @@ enum DownloadStatus {
     Successful,
     /// The download failed due to the specified error.
     Failed(Arc<DownloadError>),
-    /// The download is currently running or waiting to be started.
-    Pending
+    /// The download is currently waiting to be started.
+    Pending,
+    /// The download is currently running.
+    Running
 }
 
 impl DownloadStatus {
@@ -133,6 +159,16 @@ impl DownloadStatus {
     fn is_pending(&self) -> bool {
         match self {
             DownloadStatus::Pending => true,
+            _ => false,
+        }
+    }
+    
+    /// Returns `true` if the status is a [`Running`] value.
+    ///
+    /// [`Running`]: #variant.Running
+    fn is_running(&self) -> bool {
+        match self {
+            DownloadStatus::Running => true,
             _ => false,
         }
     }
@@ -176,6 +212,7 @@ impl Display for DownloadStatus {
             DownloadStatus::Successful => write!(f, "Successful"),
             DownloadStatus::Failed(ref err) => write!(f, "Failed({:?})", err),
             DownloadStatus::Pending => write!(f, "Pending"),
+            DownloadStatus::Running => write!(f, "Running"),
         }
     }
 }
@@ -223,7 +260,7 @@ pub struct DownloadProxy {
 }
 
 impl DownloadProxy {
-    /// Returns `true` if the download is waiting to be started or currently performed.
+    /// Returns `true` if the download is waiting to be started.
     /// 
     /// # Errors
     /// 
@@ -232,6 +269,17 @@ impl DownloadProxy {
     /// [`Download`]: ./struct.Download.html
     pub fn is_pending(&self) -> Result<bool, PoisonError<MutexGuard<Download>>> {
         self.download.lock().map(|val| val.status.is_pending())
+    }
+    
+    /// Returns `true` if the download is currently performed.
+    /// 
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    pub fn is_running(&self) -> Result<bool, PoisonError<MutexGuard<Download>>> {
+        self.download.lock().map(|val| val.status.is_running())
     }
     
     /// Returns `true` if the download was completed without errors.
@@ -276,7 +324,10 @@ impl Display for DownloadProxy {
 
 fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Download>>)
     where U: reqwest::IntoUrl {
-    println!("{:?}: Started download.", output);
+    if let Ok(mut lock) = download.lock() {
+        lock.status = DownloadStatus::Running;
+    }
+        
     let url = match link.into_url() {
         Ok(url) => url,
         Err(err) => {
