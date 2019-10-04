@@ -13,7 +13,7 @@ use std::io::{Write, Read};
 use std::convert::TryInto;
 use std::fs::{self, File, OpenOptions};
 use std::str::FromStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use reqwest::header::{CONTENT_LENGTH, RANGE};
 use reqwest::StatusCode;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
@@ -60,8 +60,11 @@ impl DownloadManager {
     /// 
     /// [`Download`]: ./struct.Download.html
     /// [`DownloadProxy`]: ./struct.DownloadProxy.html
-    pub fn get_download(&self, path_to_output_file: &PathBuf) -> Option<DownloadProxy>{
-        self.downloads.get(path_to_output_file).map(|val| DownloadProxy{download: Arc::clone(&val)})
+    pub fn get_download<P>(&self, path_to_output_file: P) -> Option<DownloadProxy>
+        where P: AsRef<Path> {
+        self.downloads
+            .get(&Arc::new(path_to_output_file.as_ref().to_path_buf()))
+            .map(|val| DownloadProxy{download: Arc::clone(&val)})
     }
     
     /// Downloads a file via HTTP or HTTPS. The progress of the download can be tracked via the `DownloadManager`.
@@ -70,15 +73,13 @@ impl DownloadManager {
     /// 
     /// * `link` - A URL to a file, which should be downloaded.
     /// * `output` - A path specifying the file to which the downloaded data is written.
-    pub fn download<U>(&mut self, link: U, output: Arc<PathBuf>)
-        where U: reqwest::IntoUrl + Send + 'static/*, 
-        P: AsRef<Path> + Send + 'static*/ {
+    pub fn download<U, P>(&mut self, link: U, output: P)
+        where U: reqwest::IntoUrl + Send + 'static, 
+        P: AsRef<Path> {
         let download: Arc<Mutex<Download>> = Arc::new(Mutex::new(Download::pending()));
-        //let output_path: PathBuf = output.into();
-        //self.insert_pathbuf(output, Arc::clone(&download));
-        
-        self.downloads.insert(Arc::clone(&output), Arc::clone(&download));
-        self.pool.spawn(move || {download_to_file(link, output, download);});
+        let output_path: Arc<PathBuf> = Arc::new(output.as_ref().to_path_buf());
+        self.downloads.insert(Arc::clone(&output_path), Arc::clone(&download));
+        self.pool.spawn(move || {download_to_file(link, output_path, download);});
     }
     
     /// Returns `true` if pending or running downloads are present. Returns `false` if 
