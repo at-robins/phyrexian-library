@@ -235,16 +235,26 @@ pub struct Download {
     status: DownloadStatus,
     downloaded_size: u64,
     total_size: Option<u64>,
+    speed: f64,
 }
 
 impl Download {
     /// Creates a new pending download instance.
     fn pending() -> Self {
-        Download{status: DownloadStatus::Pending, downloaded_size: 0, total_size: None}
+        Download{status: DownloadStatus::Pending, downloaded_size: 0, total_size: None, speed: 0f64}
     }
     
+    /// Returns the current size of the downloaded file.
     fn get_downloaded_size(&self) -> u64 {
         self.downloaded_size
+    }
+    
+    /// Returns the current download speed, if the download is running.
+    fn get_download_speed(&self) -> Option<f64> {
+        match &self.status {
+            DownloadStatus::Running => Some(self.speed),
+            _ => None,
+        }
     }
 }
 
@@ -309,9 +319,28 @@ impl DownloadProxy {
          self.download.lock().map(|val| val.status.get_error())
     }
     
+    /// Returns the current size of the downloaded file.
+    /// 
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
     pub fn get_downloaded_size(&self) -> Result<u64, PoisonError<MutexGuard<Download>>> {
          self.download.lock().map(|val| val.get_downloaded_size())
     }
+    
+    /// Returns the current download speed, if the download is running.
+    ///  
+    /// # Errors
+    /// 
+    /// An error will be propagated if the thread handling the underlying [`Download`] is poisoned.
+    /// 
+    /// [`Download`]: ./struct.Download.html
+    pub fn get_download_speed(&self) -> Result<Option<f64>,  PoisonError<MutexGuard<Download>>> {
+        self.download.lock().map(|val| val.get_download_speed())
+    }
+    
 }
 
 impl Display for DownloadProxy {
@@ -393,7 +422,7 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
         },
     };
     let mut buf = [0; 128 * 1024];
-    let mut written = 0usize;
+    let mut written = 0u64;
     let mut written_update = 0;
     let mut t_start = std::time::SystemTime::now();
     loop {
@@ -402,22 +431,22 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
             t_start = std::time::SystemTime::now();
             written_update = written;
         }
-        let len = match response.read(&mut buf) {
+        let length = match response.read(&mut buf) {
             Ok(0) => break,  // EOF.
-            Ok(len) => len,
+            Ok(length) => length,
             Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
             Err(err) => {
                 fail_download(DownloadError::from(err), download);
                 return
             },
         };
-        if let Err(err) = dl_file.write_all(&buf[..len]) {
+        if let Err(err) = dl_file.write_all(&buf[..length]) {
             fail_download(DownloadError::from(err), download);
             return
         };
-        written += len;
+        written += length as u64;
         if let Ok(mut lock) = download.lock() {
-            lock.downloaded_size = written  as u64;
+            lock.downloaded_size = written;
         }
     }
     if let Ok(mut lock) = download.lock() {
