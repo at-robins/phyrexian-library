@@ -22,6 +22,9 @@ use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 /// This corresponds to the maximum number of simultanious downloads a manager can perform.
 const DOWNLOAD_MANAGER_NUMBER_OF_THREADS: usize = 4;
 
+/// The time interval over which the download speed is averaged.
+const DOWNLOAD_SPEED_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
+
 /// A manager for asynchronous download of files via HTTP and HTTPS.
 pub struct DownloadManager {
     pool: ThreadPool,
@@ -384,18 +387,12 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
     if let Some(Ok(Ok(length))) = response
         .headers()
         .get(CONTENT_LENGTH)
-        .map(|l| {
-            l.to_str().map(|ll| u64::from_str(ll))
-         }) {
+        .map(|con_len| {
+            con_len.to_str().map(|con_len_str| u64::from_str(con_len_str))
+     }) {
             if let Ok(mut dl) = download.lock() {
                 dl.total_size = Some(length);
-            } else {
-                /*
-                 * TODO: Some propper error handling in case lock() fails.
-                 */
-                return
             }
-            
     }
     if output.is_dir() {
         fail_download(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, 
@@ -426,10 +423,14 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
     let mut written_update = 0;
     let mut t_start = std::time::SystemTime::now();
     loop {
-        if t_start.elapsed().unwrap() >= std::time::Duration::from_secs(3) {
-            //println!("{:?}: {} MB [{} MB/sec]", output, (written / 1024 / 1024), (f64::from(written - written_update) /1024.0/1024.0/ (t_start.elapsed().unwrap().as_secs() as f64)));
-            t_start = std::time::SystemTime::now();
-            written_update = written;
+        if let Ok(time) = t_start.elapsed() {
+            if time >= DOWNLOAD_SPEED_INTERVAL {
+                    if let Ok(mut lock) = download.lock() {
+                        lock.speed = ((written - written_update) * 1_000_000_000_u64) as f64 / time.as_nanos() as f64;
+                    }
+                    t_start = std::time::SystemTime::now();
+                    written_update = written;
+            }
         }
         let length = match response.read(&mut buf) {
             Ok(0) => break,  // EOF.
