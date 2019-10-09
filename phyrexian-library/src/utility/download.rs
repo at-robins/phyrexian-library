@@ -8,14 +8,11 @@ extern crate rayon;
 use core::fmt::Display;
 use std::collections::HashMap;
 use std::sync::{Mutex, Arc, PoisonError, MutexGuard};
-use std::io;
-use std::io::{Write, Read};
-use std::convert::TryInto;
-use std::fs::{self, File, OpenOptions};
+use std::{io ,io::Write, io::Read};
+use std::{fs, fs::OpenOptions};
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
-use reqwest::header::{CONTENT_LENGTH, RANGE};
-use reqwest::StatusCode;
+use reqwest::header::{CONTENT_LENGTH};
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 
 /// The number of threads per DownloadManager instance.
@@ -91,13 +88,36 @@ impl DownloadManager {
         for val in self.downloads.values() {
             if let Ok(d) = val.lock() {
                 match &d.status {
-                    DownloadStatus::Pending => return true,
-                    DownloadStatus::Running => return true,
+                    DownloadStatus::Pending | DownloadStatus::Running => return true,
                     _ => {},
                 }
             }
         }
         false
+    }
+    
+    /// Removes all failed downloads from the manager and returns a list of them.
+    pub fn remove_failed(&mut self) -> Vec<DownloadProxy> {
+        let mut failed: Vec<DownloadProxy> = Vec::new();
+        for val in self.downloads.values() {
+            if let Ok(d) = val.lock() {
+                if let DownloadStatus::Failed(_) = &d.status {
+                    failed.push(DownloadProxy{download: Arc::clone(&val)});
+                }
+            }
+        }
+        self.downloads.retain(|_, value| {
+            if let Ok(download) = value.lock() {
+                return !download.status.is_failed()
+            }
+            false
+        });
+        failed
+    }
+    
+    /// Returns the number of downloads in this manager.
+    pub fn size(&self) -> usize {
+        self.downloads.len()
     }
     
     /*pub fn print_all(&self) {
@@ -139,7 +159,6 @@ impl From<reqwest::Error> for DownloadError {
         DownloadError::ReqwestError(error)
     }
 }
-
 
 /// An `enum` indicating the current status of a [`Download`].
 /// 
@@ -333,7 +352,7 @@ impl DownloadProxy {
          self.download.lock().map(|val| val.get_downloaded_size())
     }
     
-    /// Returns the current download speed, if the download is running.
+    /// Returns the current download speed in byte/sec, if the download is running.
     ///  
     /// # Errors
     /// 
@@ -467,6 +486,56 @@ fn fail_download(failure: DownloadError, download: Arc<Mutex<Download>>) {
 #[cfg(test)]
 mod test {
     use super::*;
+    
+    fn new_download(status: DownloadStatus) -> Arc<Mutex<Download>> {
+            Arc::new(Mutex::new(Download{status, downloaded_size: 0, total_size: None, speed: 0f64}))
+    }
+    fn new_path<P>(path: P) -> Arc<PathBuf> where P: AsRef<Path> {
+        Arc::new(path.as_ref().to_path_buf())
+    }
+    
+    #[test]
+    fn test_download_manager_remove_failed() {
+        let mut manager = DownloadManager::new().unwrap();
+        let success = new_download(DownloadStatus::Successful);
+        let pending = new_download(DownloadStatus::Pending);
+        let running = new_download(DownloadStatus::Running);
+        let download_map = &mut manager.downloads;
+        download_map.insert(new_path("/success"), success);
+        download_map.insert(new_path("/pending"), pending);
+        download_map.insert(new_path("/running"), running);
+        let mut failed_list = Vec::new();
+        for i in 0..24 {
+            let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
+            let failed_download = new_download(DownloadStatus::from(err));
+            download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
+            failed_list.push(DownloadProxy{download: failed_download});
+        }
+        let obtained_failed = manager.remove_failed();
+        assert_eq!(manager.size(), 3);
+        assert_eq!(obtained_failed.len(), failed_list.len());
+        for fail in obtained_failed {
+            assert!(fail.is_failed().unwrap());
+        }
+    }
+    
+    #[test]
+    fn test_download_manager_size() {
+        let mut manager = DownloadManager::new().unwrap();
+        let success = new_download(DownloadStatus::Successful);
+        let pending = new_download(DownloadStatus::Pending);
+        let running = new_download(DownloadStatus::Running);
+        let download_map = &mut manager.downloads;
+        download_map.insert(new_path("/success"), success);
+        download_map.insert(new_path("/pending"), pending);
+        download_map.insert(new_path("/running"), running);
+        for i in 0..95 {
+            let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
+            let failed_download = new_download(DownloadStatus::from(err));
+            download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
+        }
+        assert_eq!(manager.size(), 98);
+    }
     
     #[test]
     fn test_download_status_is_pending() {
