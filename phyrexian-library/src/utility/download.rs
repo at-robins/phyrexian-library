@@ -484,10 +484,5 @@ fn fail_download(failure: DownloadError, download: Arc<Mutex<Download>>) {
 }
 
 #[cfg(test)]
-mod download_mod_tests;
+mod test;
 
-#[cfg(test)]
-mod download_status_tests;
-
-#[cfg(test)]
-mod download_manager_tests;
