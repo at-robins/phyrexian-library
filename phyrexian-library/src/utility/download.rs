@@ -12,7 +12,7 @@ use std::{io ,io::Write, io::Read};
 use std::{fs, fs::OpenOptions};
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
-use reqwest::header::{CONTENT_LENGTH};
+use reqwest::header::CONTENT_LENGTH;
 use rayon::{ThreadPoolBuilder, ThreadPoolBuildError, ThreadPool};
 
 /// The number of threads per DownloadManager instance.
@@ -484,109 +484,10 @@ fn fail_download(failure: DownloadError, download: Arc<Mutex<Download>>) {
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    
-    fn new_download(status: DownloadStatus) -> Arc<Mutex<Download>> {
-            Arc::new(Mutex::new(Download{status, downloaded_size: 0, total_size: None, speed: 0f64}))
-    }
-    fn new_path<P>(path: P) -> Arc<PathBuf> where P: AsRef<Path> {
-        Arc::new(path.as_ref().to_path_buf())
-    }
-    
-    #[test]
-    fn test_download_manager_remove_failed() {
-        let mut manager = DownloadManager::new().unwrap();
-        let success = new_download(DownloadStatus::Successful);
-        let pending = new_download(DownloadStatus::Pending);
-        let running = new_download(DownloadStatus::Running);
-        let download_map = &mut manager.downloads;
-        download_map.insert(new_path("/success"), success);
-        download_map.insert(new_path("/pending"), pending);
-        download_map.insert(new_path("/running"), running);
-        let mut failed_list = Vec::new();
-        for i in 0..24 {
-            let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
-            let failed_download = new_download(DownloadStatus::from(err));
-            download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
-            failed_list.push(DownloadProxy{download: failed_download});
-        }
-        let obtained_failed = manager.remove_failed();
-        assert_eq!(manager.size(), 3);
-        assert_eq!(obtained_failed.len(), failed_list.len());
-        for fail in obtained_failed {
-            assert!(fail.is_failed().unwrap());
-        }
-    }
-    
-    #[test]
-    fn test_download_manager_size() {
-        let mut manager = DownloadManager::new().unwrap();
-        let success = new_download(DownloadStatus::Successful);
-        let pending = new_download(DownloadStatus::Pending);
-        let running = new_download(DownloadStatus::Running);
-        let download_map = &mut manager.downloads;
-        download_map.insert(new_path("/success"), success);
-        download_map.insert(new_path("/pending"), pending);
-        download_map.insert(new_path("/running"), running);
-        for i in 0..95 {
-            let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
-            let failed_download = new_download(DownloadStatus::from(err));
-            download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
-        }
-        assert_eq!(manager.size(), 98);
-    }
-    
-    #[test]
-    fn test_download_status_is_pending() {
-        let status: DownloadStatus = DownloadStatus::Pending;
-        assert_eq!(status.is_pending(), true);
-        
-        let status: DownloadStatus = DownloadStatus::Successful;
-        assert_eq!(status.is_pending(), false);
-        
-        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::from(err);
-        assert_eq!(status.is_pending(), false);
-    }
-    
-    #[test]
-    fn test_download_status_is_successful() {
-        let status: DownloadStatus = DownloadStatus::Pending;
-        assert_eq!(status.is_successful(), false);
-        
-        let status: DownloadStatus = DownloadStatus::Successful;
-        assert_eq!(status.is_successful(), true);
-        
-        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::from(err);
-        assert_eq!(status.is_successful(), false);
-    }
-    
-    #[test]
-    fn test_download_status_is_failed() {
-        let status: DownloadStatus = DownloadStatus::Pending;
-        assert_eq!(status.is_failed(), false);
-        
-        let status: DownloadStatus = DownloadStatus::Successful;
-        assert_eq!(status.is_failed(), false);
-        
-        let err = io::Error::new(io::ErrorKind::InvalidInput, "This is a test error.");
-        let status: DownloadStatus = DownloadStatus::from(err);
-        assert_eq!(status.is_failed(), true);
-    }
-    
-    #[test]
-    fn test_download_status_get_error() {
-        use std::error::Error;
-        let error_description = "This is a test error.";
-        let err = Arc::new(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, error_description)));
-        let status = DownloadStatus::Failed(Arc::clone(&err));
-        match *status.get_error().expect("There must be an error.") {
-            DownloadError::IoError(ref err) if err.kind() == io::ErrorKind::InvalidInput && err.description() == error_description => {},
-            DownloadError::IoError(ref err) => panic!("{:?} is not the correct error.", err),
-            DownloadError::ReqwestError(ref err) => panic!("{:?} is not the correct error.", err),
-        }
-    }
+mod download_mod_tests;
 
-}
+#[cfg(test)]
+mod download_status_tests;
+
+#[cfg(test)]
+mod download_manager_tests;
