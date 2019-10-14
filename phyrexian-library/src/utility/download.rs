@@ -23,6 +23,7 @@ const DOWNLOAD_MANAGER_NUMBER_OF_THREADS: usize = 4;
 const DOWNLOAD_SPEED_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// A manager for asynchronous download of files via HTTP and HTTPS.
+#[derive(Debug)]
 pub struct DownloadManager {
     pool: ThreadPool,
     downloads: HashMap<Arc<PathBuf>, Arc<Mutex<Download>>>,
@@ -160,6 +161,15 @@ impl From<reqwest::Error> for DownloadError {
     }
 }
 
+impl Display for DownloadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DownloadError::IoError(err) => err.fmt(f),
+            DownloadError::ReqwestError(ref err) => err.fmt(f),
+        }
+    }
+}
+
 /// An `enum` indicating the current status of a [`Download`].
 /// 
 /// [`Download`]: ./struct.Download.html
@@ -233,7 +243,7 @@ impl Display for DownloadStatus {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             DownloadStatus::Successful => write!(f, "Successful"),
-            DownloadStatus::Failed(ref err) => write!(f, "Failed({:?})", err),
+            DownloadStatus::Failed(ref err) => write!(f, "Failed({})", err),
             DownloadStatus::Pending => write!(f, "Pending"),
             DownloadStatus::Running => write!(f, "Running"),
         }
@@ -282,7 +292,10 @@ impl Download {
 
 impl Display for Download {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.status.fmt(f)
+        match &self.status {
+            DownloadStatus::Running => write!(f, "{} ({} byte/sec): {}/{:?} byte", &self.status, &self.speed, &self.downloaded_size, &self.total_size),
+            _ => write!(f, "{}: {}/{:?} byte", &self.status, &self.downloaded_size, &self.total_size),
+        }
     }
 }
 
@@ -362,14 +375,13 @@ impl DownloadProxy {
     pub fn get_download_speed(&self) -> Result<Option<f64>,  PoisonError<MutexGuard<Download>>> {
         self.download.lock().map(|val| val.get_download_speed())
     }
-    
 }
 
 impl Display for DownloadProxy {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self.download.lock() {
-            Ok(val) => val.fmt(f),
-            Err(err) => write!(f, "{}", err),
+            Ok(ref val) => val.fmt(f),
+            Err(ref err) => err.fmt(f),
         }
     }
 }
