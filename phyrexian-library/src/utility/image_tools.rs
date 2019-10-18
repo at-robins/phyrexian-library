@@ -67,15 +67,15 @@ pub enum SplitMode {
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapBottomLeftMode,
     /// A custom splitting mode.
-    CustomMode(Box<dyn Fn(u32,u32,u32,u32) -> Vec<ImagePoint>>),
+    CustomMode(Box<dyn Fn(u32, u32, u32, u32) -> Vec<ImagePoint>>),
 }
 
 impl SplitMode {
     fn get_starts(&self, image_width: u32, image_height: u32, split_width: u32, split_height: u32) -> Vec<ImagePoint> {
         match self {
             EdgeOverlapBottomLeftMode => combine_coordinates(
-                    &split_range_perfect(image_width, split_width),
-                    &split_range_perfect(image_height, split_height)
+                    &split_range_align_end(image_width, split_width),
+                    &split_range_align_end(image_height, split_height)
                 ),
             CustomMode(custom_function) => custom_function(image_width, image_height, split_width, split_height),
         }
@@ -107,7 +107,21 @@ impl SplitableImageExt for image::DynamicImage {
     }
 }
 
-fn split_range_perfect(original: u32, split: u32) -> Vec<u32> {
+/// Splits the specified range into parts of the defined length.
+/// Overlapping may happen at the end of the range.
+/// 
+/// If the defined `split` length is longer than the `original` range an
+/// empty vector is returned.
+/// 
+/// # Arguments
+/// 
+/// * `original` - A number representing a continous range.
+/// * `split` - The length of the parts to split the specified range into.
+/// 
+/// # Panics
+/// 
+/// If the `split` length is 0.
+fn split_range_align_end(original: u32, split: u32) -> Vec<u32> {
     if split == 0 {
         panic!("Splitting into 0 is not possible.");
     } else if original < split {
@@ -143,21 +157,21 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_split_range_perfect() {
+    fn test_split_align_end() {
         // Test zero input length.
-        assert_eq!(split_range_perfect(0, 12), Vec::<u32>::new());
+        assert_eq!(split_range_align_end(0, 12), Vec::<u32>::new());
         // Test input length smaller than split length.
-        assert_eq!(split_range_perfect(364, 2490), Vec::<u32>::new());
+        assert_eq!(split_range_align_end(364, 2490), Vec::<u32>::new());
         // Test normal behaviour without overlap.
-        assert_eq!(split_range_perfect(50000, 10000), vec!(0,10000,20000,30000,40000));
+        assert_eq!(split_range_align_end(50000, 10000), vec!(0,10000,20000,30000,40000));
         // Test normal behaviour with overlap.
-        assert_eq!(split_range_perfect(50067, 10000), vec!(0,10000,20000,30000,40000,40067));
+        assert_eq!(split_range_align_end(50067, 10000), vec!(0,10000,20000,30000,40000,40067));
     }
     
     #[test]
     #[should_panic(expected="Splitting into 0 is not possible.")]
-    fn test_split_range_perfect_panic_zero() {
-        split_range_perfect(43, 0);
+    fn test_split_range_align_end_panic_zero() {
+        split_range_align_end(43, 0);
     }
     
     #[test]
