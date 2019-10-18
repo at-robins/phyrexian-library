@@ -3,9 +3,60 @@
 
 extern crate image;
 
+use core::borrow::Borrow;
 use image::GenericImageView;
-//use core::fmt::Display;
+use core::fmt::Display;
 use SplitMode::*;
+
+#[derive(Debug, Hash, PartialEq, Eq, Default, Clone, Copy)]
+/// An point / pixel coordinate on an image.
+pub struct ImagePoint {
+    /// The pixel on the x-axis corresponding to the width.
+    x: u32,
+    /// The pixel on the y-axis corresponding to the height.
+    y: u32,
+}
+
+impl ImagePoint {
+    /// Creates an `ImagePoint` from a x- and y-coordinate.
+    pub fn new<P>(x: P, y: P) -> Self where P: Borrow<u32>{
+        ImagePoint{x: *x.borrow(), y: *y.borrow()}
+    }
+    
+    /// Returns the x-coordinate of this point.
+    pub fn x(self) -> u32 {
+        self.x
+    }
+    
+    /// Returns the y-coordinate of this point.
+    pub fn y(self) -> u32 {
+        self.y
+    }
+}
+
+impl<P> From<&(P, P)> for ImagePoint where P: Borrow<u32> {
+    fn from(point: &(P, P)) -> Self {
+        ImagePoint::new(point.0.borrow(), point.1.borrow())
+    }
+}
+
+impl<P> From<(P, P)> for ImagePoint where P: Borrow<u32> {
+    fn from(point: (P, P)) -> Self {
+        ImagePoint::new(point.0, point.1)
+    }
+}
+
+impl Into<(u32, u32)> for ImagePoint {
+    fn into(self) -> (u32, u32) {
+        (self.x, self.y)
+    }
+}
+
+impl Display for ImagePoint {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "(x = {} , y = {})", self.x, self.y)
+    }
+}
 
 /// The `SplitMode` enum contains all possible modes of splitting a image into 
 /// subimages of a defined size.
@@ -14,17 +65,17 @@ use SplitMode::*;
 pub enum SplitMode {
     /// A mode to producing overlapping sub images at the left and bottom edges 
     /// if there is no way of perfectly splitting the image.
-    EdgeOverlapLeftBottomMode,
+    EdgeOverlapBottomLeftMode,
     /// A custom splitting mode.
-    CustomMode(Box<dyn Fn(u32,u32,u32,u32) -> Vec<(u32, u32)>>),
+    CustomMode(Box<dyn Fn(u32,u32,u32,u32) -> Vec<ImagePoint>>),
 }
 
 impl SplitMode {
-    fn get_starts(&self, image_width: u32, image_height: u32, split_width: u32, split_height: u32) -> Vec<(u32, u32)> {
+    fn get_starts(&self, image_width: u32, image_height: u32, split_width: u32, split_height: u32) -> Vec<ImagePoint> {
         match self {
-            EdgeOverlapLeftBottomMode => combine_height_width(
-                    &split_range_perfect(image_height, split_height),
-                    &split_range_perfect(image_width, split_width)
+            EdgeOverlapBottomLeftMode => combine_coordinates(
+                    &split_range_perfect(image_width, split_width),
+                    &split_range_perfect(image_height, split_height)
                 ),
             CustomMode(custom_function) => custom_function(image_width, image_height, split_width, split_height),
         }
@@ -32,7 +83,7 @@ impl SplitMode {
 }
 
 impl Default for SplitMode {
-    fn default() -> Self { EdgeOverlapLeftBottomMode }
+    fn default() -> Self { EdgeOverlapBottomLeftMode }
 }
 
 pub trait SplitableImageExt where Self : Sized {
@@ -45,7 +96,7 @@ impl SplitableImageExt for image::DynamicImage {
             // Only split images if the image can be split.
             if self.height() >= height && self.width() >= width {
                 mode.get_starts(self.width(), self.height(), width, height).iter()
-                    .map(|start| self.crop(start.1, start.0, width, height))
+                    .map(|start| self.crop(start.x(), start.y(), width, height))
                     .collect()
             } else {
                 Vec::new()
@@ -71,9 +122,18 @@ fn split_range_perfect(original: u32, split: u32) -> Vec<u32> {
     range
 }
 
-fn combine_height_width(heights: &[u32], widths: &[u32]) -> Vec<(u32, u32)> {
-    heights.iter()
-        .flat_map(|h| widths.iter().map(move |w| (*h, *w)))
+/// Combines the coordinates into [`ImagePoint`]s by forming every 
+/// possible x-y-pair.
+/// 
+/// # Arguments
+/// 
+/// * `x_coordinates` - A list of x-coordinates.
+/// * `y_coordinates` - A list of y-coordinates.
+/// 
+/// [`ImagePoint`]: ./struct.ImagePoint.html
+fn combine_coordinates(x_coordinates: &[u32], y_coordinates: &[u32]) -> Vec<ImagePoint> {
+    x_coordinates.iter()
+        .flat_map(|x| y_coordinates.iter().map(move |y| ImagePoint::new(x, y)))
         .collect()
 }
 
@@ -101,20 +161,20 @@ mod tests {
     }
     
     #[test]
-    fn test_combine_height_width() {
-        let heights = vec!(7, 24987, 78);
-        let widths = vec!(12, 943, 44944);
+    fn test_combine_coordinates() {
+        let x = vec!(7, 24987, 78);
+        let y = vec!(12, 943, 44944);
         // Test empty height input.
-        assert_eq!(combine_height_width(&Vec::new(), &widths), Vec::<(u32, u32)>::new());
+        assert_eq!(combine_coordinates(&Vec::new(), &y), Vec::<ImagePoint>::new());
         // Test empty width input.
-        assert_eq!(combine_height_width(&heights, &Vec::new()), Vec::<(u32, u32)>::new());
-        let combined_assertion = vec!(
+        assert_eq!(combine_coordinates(&x, &Vec::new()), Vec::<ImagePoint>::new());
+        let combined_assertion = [
             (7, 12), (7, 943), (7, 44944),
             (24987, 12), (24987, 943), (24987, 44944),
             (78, 12), (78, 943), (78, 44944)
-        );
+        ].iter().map(ImagePoint::from);
         // Check if every element is present without caring for the order of elements.
-        let combined_result = combine_height_width(&heights, &widths);
+        let combined_result = combine_coordinates(&x, &y);
         assert_eq!(combined_assertion.len(), combined_result.len());
         for assertion in combined_assertion {
             assert!(combined_result.contains(&assertion));
