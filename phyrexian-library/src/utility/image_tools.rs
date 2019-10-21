@@ -3,6 +3,7 @@
 
 extern crate image;
 
+use std::num::NonZeroU32;
 use core::borrow::Borrow;
 use image::GenericImageView;
 use core::fmt::Display;
@@ -67,16 +68,16 @@ pub enum SplitMode {
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapBottomLeftMode,
     /// A custom splitting mode.
-    CustomMode(Box<dyn Fn(u32, u32, u32, u32) -> Vec<ImagePoint>>),
+    CustomMode(Box<dyn Fn(u32, u32, NonZeroU32, NonZeroU32) -> Vec<ImagePoint>>),
 }
 
 impl SplitMode {
-    fn get_starts(&self, image_width: u32, image_height: u32, split_width: u32, split_height: u32) -> Vec<ImagePoint> {
+    fn get_starts(&self, image_width: u32, image_height: u32, split_width: NonZeroU32, split_height: NonZeroU32) -> Vec<ImagePoint> {
         match self {
             EdgeOverlapBottomLeftMode => combine_coordinates(
-                    &split_range_align_end(image_width, split_width),
-                    &split_range_align_end(image_height, split_height)
-                ),
+                &split_range_align_end(image_width, split_width),
+                &split_range_align_end(image_height, split_height)
+            ),
             CustomMode(custom_function) => custom_function(image_width, image_height, split_width, split_height),
         }
     }
@@ -87,22 +88,19 @@ impl Default for SplitMode {
 }
 
 pub trait SplitableImageExt where Self : Sized {
-    fn split_into(&mut self, height: u32, width: u32, mode: SplitMode) -> Vec<Self>;
+    fn split_into(&mut self, height: NonZeroU32, width: NonZeroU32, mode: SplitMode) -> Vec<Self>;
 }
 
 impl SplitableImageExt for image::DynamicImage {
-    fn split_into(&mut self, height: u32, width: u32, mode: SplitMode) -> Vec<Self> {
-        if height > 0 && width > 0 {
-            // Only split images if the image can be split.
-            if self.height() >= height && self.width() >= width {
-                mode.get_starts(self.width(), self.height(), width, height).iter()
-                    .map(|start| self.crop(start.x(), start.y(), width, height))
-                    .collect()
-            } else {
-                Vec::new()
-            }
+    fn split_into(&mut self, height: NonZeroU32, width: NonZeroU32, mode: SplitMode) -> Vec<Self> {
+        let (width_u, height_u) = (width.get(), height.get());
+        // Only split images if the image can be split.
+        if self.height() >= height_u && self.width() >= width_u {
+            mode.get_starts(self.width(), self.height(), width, height).iter()
+                .map(|start| self.crop(start.x(), start.y(), width_u, height_u))
+                .collect()
         } else {
-            panic!("Cannot split into images of 0 pixels.")
+            Vec::new()
         }
     }
 }
@@ -116,24 +114,22 @@ impl SplitableImageExt for image::DynamicImage {
 /// # Arguments
 /// 
 /// * `original` - A number representing a continous range.
-/// * `split` - The length of the parts to split the specified range into.
-/// 
-/// # Panics
-/// 
-/// If the `split` length is 0.
-fn split_range_align_end(original: u32, split: u32) -> Vec<u32> {
-    if split == 0 {
-        panic!("Splitting into 0 is not possible.");
-    } else if original < split {
-        return Vec::new();
+/// * `split` - The length of the parts to split the specified range into. 
+/// this cannot be zero.
+fn split_range_align_end(original: u32, split: NonZeroU32) -> Vec<u32> {
+    let split = split.get();
+    if original < split {
+        Vec::new()
+    } else {
+        let mut range: Vec<u32> = (0..(original / split))
+            .map(|h| h * split)
+            .collect();
+        if original % split != 0 {
+            range.push(original - split);
+        }
+        range
     }
-    let mut range: Vec<u32> = (0..(original / split))
-        .map(|h| h * split)
-        .collect();
-    if original % split != 0 {
-        range.push(original - split);
-    }
-    range
+
 }
 
 /// Combines the coordinates into [`ImagePoint`]s by forming every 
@@ -159,19 +155,13 @@ mod tests {
     #[test]
     fn test_split_align_end() {
         // Test zero input length.
-        assert_eq!(split_range_align_end(0, 12), Vec::<u32>::new());
+        assert_eq!(split_range_align_end(0, NonZeroU32::new(12).unwrap()), Vec::<u32>::new());
         // Test input length smaller than split length.
-        assert_eq!(split_range_align_end(364, 2490), Vec::<u32>::new());
+        assert_eq!(split_range_align_end(364, NonZeroU32::new(2490).unwrap()), Vec::<u32>::new());
         // Test normal behaviour without overlap.
-        assert_eq!(split_range_align_end(50000, 10000), vec!(0,10000,20000,30000,40000));
+        assert_eq!(split_range_align_end(50000, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000));
         // Test normal behaviour with overlap.
-        assert_eq!(split_range_align_end(50067, 10000), vec!(0,10000,20000,30000,40000,40067));
-    }
-    
-    #[test]
-    #[should_panic(expected="Splitting into 0 is not possible.")]
-    fn test_split_range_align_end_panic_zero() {
-        split_range_align_end(43, 0);
+        assert_eq!(split_range_align_end(50067, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000,40067));
     }
     
     #[test]
