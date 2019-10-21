@@ -67,6 +67,15 @@ pub enum SplitMode {
     /// A mode to producing overlapping sub images at the left and bottom edges 
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapBottomLeftMode,
+    /// A mode to producing overlapping sub images at the right and bottom edges 
+    /// if there is no way of perfectly splitting the image.
+    EdgeOverlapBottomRightMode,
+    /// A mode to producing overlapping sub images at the left and top edges 
+    /// if there is no way of perfectly splitting the image.
+    EdgeOverlapTopLeftMode,
+    /// A mode to producing overlapping sub images at the right and top edges 
+    /// if there is no way of perfectly splitting the image.
+    EdgeOverlapTopRightMode,
     /// A custom splitting mode.
     CustomMode(Box<dyn Fn(u32, u32, NonZeroU32, NonZeroU32) -> Vec<ImagePoint>>),
 }
@@ -75,8 +84,20 @@ impl SplitMode {
     fn get_starts(&self, image_width: u32, image_height: u32, split_width: NonZeroU32, split_height: NonZeroU32) -> Vec<ImagePoint> {
         match self {
             EdgeOverlapBottomLeftMode => combine_coordinates(
+                &split_range_align_start(image_width, split_width),
+                &split_range_align_end(image_height, split_height)
+            ),
+            EdgeOverlapBottomRightMode => combine_coordinates(
                 &split_range_align_end(image_width, split_width),
                 &split_range_align_end(image_height, split_height)
+            ),
+            EdgeOverlapTopLeftMode => combine_coordinates(
+                &split_range_align_start(image_width, split_width),
+                &split_range_align_start(image_height, split_height)
+            ),
+            EdgeOverlapTopRightMode => combine_coordinates(
+                &split_range_align_end(image_width, split_width),
+                &split_range_align_start(image_height, split_height)
             ),
             CustomMode(custom_function) => custom_function(image_width, image_height, split_width, split_height),
         }
@@ -129,7 +150,34 @@ fn split_range_align_end(original: u32, split: NonZeroU32) -> Vec<u32> {
         }
         range
     }
+}
 
+/// Splits the specified range into parts of the defined length.
+/// Overlapping may happen at the start of the range.
+/// 
+/// If the defined `split` length is longer than the `original` range an
+/// empty vector is returned.
+/// 
+/// # Arguments
+/// 
+/// * `original` - A number representing a continous range.
+/// * `split` - The length of the parts to split the specified range into. 
+/// this cannot be zero.
+fn split_range_align_start(original: u32, split: NonZeroU32) -> Vec<u32> {
+    let split = split.get();
+    if original < split {
+        Vec::new()
+    } else {
+        let overlap = original % split;
+        let mut range: Vec<u32> = (0..(original / split))
+            .map(|i| i * split)
+            .map(|i| i + overlap)
+            .collect();
+        if overlap != 0 {
+            range.insert(0, 0);
+        }
+        range
+    }
 }
 
 /// Combines the coordinates into [`ImagePoint`]s by forming every 
@@ -151,6 +199,18 @@ fn combine_coordinates(x_coordinates: &[u32], y_coordinates: &[u32]) -> Vec<Imag
 mod tests {
     
     use super::*;
+    
+    #[test]
+    fn test_split_align_start() {
+        // Test zero input length.
+        assert_eq!(split_range_align_start(0, NonZeroU32::new(12).unwrap()), Vec::<u32>::new());
+        // Test input length smaller than split length.
+        assert_eq!(split_range_align_start(364, NonZeroU32::new(2490).unwrap()), Vec::<u32>::new());
+        // Test normal behaviour without overlap.
+        assert_eq!(split_range_align_start(50000, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000));
+        // Test normal behaviour with overlap.
+        assert_eq!(split_range_align_start(50067, NonZeroU32::new(10000).unwrap()), vec!(0,67,10067,20067,30067,40067));
+    }
     
     #[test]
     fn test_split_align_end() {
