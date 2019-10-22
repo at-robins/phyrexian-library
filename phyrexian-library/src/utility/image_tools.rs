@@ -105,7 +105,7 @@ impl SplitMode {
 }
 
 impl Default for SplitMode {
-    fn default() -> Self { EdgeOverlapBottomLeftMode }
+    fn default() -> Self { EdgeOverlapBottomRightMode }
 }
 
 pub trait SplitableImageExt where Self : Sized {
