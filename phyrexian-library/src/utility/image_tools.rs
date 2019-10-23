@@ -245,6 +245,17 @@ mod tests {
     use super::*;
     
     #[test]
+    fn test_image_point() {
+        let x = 465;
+        let y = 0;
+        let point = ImagePoint::new(x, y);
+        // Test getting the x-coordinate.
+        assert_eq!(point.x(), x);
+        // Test getting the y-coordinate.
+        assert_eq!(point.y(), y);
+    }
+    
+    #[test]
     fn test_split_align_start() {
         // Test zero input length.
         assert_eq!(split_range_align_start(0, NonZeroU32::new(12).unwrap()), Vec::<u32>::new());
