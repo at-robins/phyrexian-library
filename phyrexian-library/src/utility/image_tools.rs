@@ -81,6 +81,25 @@ pub enum SplitMode {
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapTopRightMode,
     /// A custom splitting mode.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use std::num::NonZeroU32;
+    /// use phyrexian_library::utility::image_tools::{SplitMode, SplitableImageExt};
+    /// use image::DynamicImage;
+    /// 
+    /// let mode = SplitMode::CustomMode(Box::new(| 
+    ///    image_width, 
+    ///    image_height, 
+    ///    split_width, 
+    ///    split_height
+    /// | Vec::new()));
+    /// let mut image = DynamicImage::new_rgba8(128, 128);
+    /// let split_length = NonZeroU32::new(32).unwrap();
+    /// let split_images = image.split_into(split_length, split_length, mode);
+    /// assert!(split_images.is_empty());
+    /// ```
     CustomMode(Box<dyn Fn(u32, u32, NonZeroU32, NonZeroU32) -> Vec<ImagePoint>>),
 }
 
@@ -145,7 +164,7 @@ impl Default for SplitMode {
     fn default() -> Self { EdgeOverlapBottomRightMode }
 }
 
-pub trait SplitableImageExt where Self: Sized {
+pub trait SplitableImageExt where Self: image::GenericImage + Sized {
     fn split_into(&mut self, width: NonZeroU32, height: NonZeroU32, mode: SplitMode) -> Vec<Self>;
 }
 
