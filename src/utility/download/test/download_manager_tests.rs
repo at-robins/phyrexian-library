@@ -21,7 +21,7 @@ fn test_remove_failed() {
     assert_eq!(manager.size(), 3);
     assert_eq!(obtained_failed.len(), failed_list.len());
     for fail in obtained_failed {
-        assert!(fail.is_failed().unwrap());
+        assert!(fail.is_failed());
     }
 }
 
