@@ -12,10 +12,12 @@ fn test_remove_failed() {
     download_map.insert(new_path("/running"), running);
     let mut failed_list = Vec::new();
     for i in 0..24 {
-        let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
+        let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}", i));
         let failed_download = new_download(DownloadStatus::from(err));
-        download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
-        failed_list.push(DownloadProxy{download: failed_download});
+        download_map.insert(new_path(format!("/{}", i)), Arc::clone(&failed_download));
+        failed_list.push(DownloadProxy {
+            download: failed_download,
+        });
     }
     let obtained_failed = manager.remove_failed();
     assert_eq!(manager.size(), 3);
@@ -36,9 +38,9 @@ fn test_size() {
     download_map.insert(new_path("/pending"), pending);
     download_map.insert(new_path("/running"), running);
     for i in 0..95 {
-        let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}",i));
+        let err = io::Error::new(io::ErrorKind::InvalidInput, format!("{}", i));
         let failed_download = new_download(DownloadStatus::from(err));
-        download_map.insert(new_path(format!("/{}",i)), Arc::clone(&failed_download));
+        download_map.insert(new_path(format!("/{}", i)), Arc::clone(&failed_download));
     }
     assert_eq!(manager.size(), 98);
 }

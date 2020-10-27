@@ -7,15 +7,15 @@ extern crate reqwest;
 extern crate serde_json;
 
 use parking_lot::Mutex;
-use rayon::{ThreadPool, ThreadPoolBuilder, ThreadPoolBuildError};
+use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
 use reqwest::header::CONTENT_LENGTH;
-use std::fmt::Display;
 use std::collections::HashMap;
-use std::{fs, fs::OpenOptions};
-use std::{io ,io::Write, io::Read};
+use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use std::{fs, fs::OpenOptions};
+use std::{io, io::Read, io::Write};
 
 /// The number of threads per DownloadManager instance.
 /// This corresponds to the maximum number of simultanious downloads a manager can perform.
@@ -48,8 +48,10 @@ impl DownloadManager {
     /// # Errors
     /// Returns an error if creation of the underlying thread pool failed.
     pub fn new() -> Result<DownloadManager, ThreadPoolBuildError> {
-        Ok(DownloadManager{
-            pool: ThreadPoolBuilder::new().num_threads(DOWNLOAD_MANAGER_NUMBER_OF_THREADS).build()?,
+        Ok(DownloadManager {
+            pool: ThreadPoolBuilder::new()
+                .num_threads(DOWNLOAD_MANAGER_NUMBER_OF_THREADS)
+                .build()?,
             downloads: HashMap::new(),
         })
     }
@@ -64,10 +66,14 @@ impl DownloadManager {
     /// [`Download`]: ./struct.Download.html
     /// [`DownloadProxy`]: ./struct.DownloadProxy.html
     pub fn get_download<P>(&self, path_to_output_file: P) -> Option<DownloadProxy>
-        where P: AsRef<Path> {
+    where
+        P: AsRef<Path>,
+    {
         self.downloads
             .get(&Arc::new(path_to_output_file.as_ref().to_path_buf()))
-            .map(|val| DownloadProxy{download: Arc::clone(&val)})
+            .map(|val| DownloadProxy {
+                download: Arc::clone(&val),
+            })
     }
 
     /// Downloads a file via HTTP or HTTPS. The progress of the download can be tracked via the `DownloadManager`.
@@ -77,12 +83,17 @@ impl DownloadManager {
     /// * `link` - A URL to a file, which should be downloaded.
     /// * `output` - A path specifying the file to which the downloaded data is written.
     pub fn download<U, P>(&mut self, link: U, output: P)
-        where U: reqwest::IntoUrl + Send + 'static,
-        P: AsRef<Path> {
+    where
+        U: reqwest::IntoUrl + Send + 'static,
+        P: AsRef<Path>,
+    {
         let download: Arc<Mutex<Download>> = Arc::new(Mutex::new(Download::pending()));
         let output_path: Arc<PathBuf> = Arc::new(output.as_ref().to_path_buf());
-        self.downloads.insert(Arc::clone(&output_path), Arc::clone(&download));
-        self.pool.spawn(move || {download_to_file(link, output_path, download);});
+        self.downloads
+            .insert(Arc::clone(&output_path), Arc::clone(&download));
+        self.pool.spawn(move || {
+            download_to_file(link, output_path, download);
+        });
     }
 
     /// Returns `true` if pending or running downloads are present. Returns `false` if
@@ -91,7 +102,7 @@ impl DownloadManager {
         for val in self.downloads.values() {
             match val.lock().status {
                 DownloadStatus::Pending | DownloadStatus::Running => return true,
-                _ => {},
+                _ => {}
             }
         }
         false
@@ -102,10 +113,13 @@ impl DownloadManager {
         let mut failed: Vec<DownloadProxy> = Vec::new();
         for val in self.downloads.values() {
             if let DownloadStatus::Failed(_) = val.lock().status {
-                failed.push(DownloadProxy{download: Arc::clone(&val)});
+                failed.push(DownloadProxy {
+                    download: Arc::clone(&val),
+                });
             }
         }
-        self.downloads.retain(|_, value| !value.lock().status.is_failed());
+        self.downloads
+            .retain(|_, value| !value.lock().status.is_failed());
         failed
     }
 
@@ -175,7 +189,7 @@ enum DownloadStatus {
     /// The download is currently waiting to be started.
     Pending,
     /// The download is currently running.
-    Running
+    Running,
 }
 
 impl DownloadStatus {
@@ -266,7 +280,12 @@ pub struct Download {
 impl Download {
     /// Creates a new pending download instance.
     fn pending() -> Self {
-        Download{status: DownloadStatus::Pending, downloaded_size: 0, total_size: None, speed: 0f64}
+        Download {
+            status: DownloadStatus::Pending,
+            downloaded_size: 0,
+            total_size: None,
+            speed: 0f64,
+        }
     }
 
     /// Returns the current size of the downloaded file.
@@ -286,16 +305,15 @@ impl Download {
 impl Display for Download {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match &self.status {
-            DownloadStatus::Running => write!(f, "{} ({} byte/sec): {}/{:?} byte",
-                &self.status,
-                &self.speed,
-                &self.downloaded_size,
-                &self.total_size
+            DownloadStatus::Running => write!(
+                f,
+                "{} ({} byte/sec): {}/{:?} byte",
+                &self.status, &self.speed, &self.downloaded_size, &self.total_size
             ),
-            _ => write!(f, "{}: {}/{:?} byte",
-                &self.status,
-                &self.downloaded_size,
-                &self.total_size
+            _ => write!(
+                f,
+                "{}: {}/{:?} byte",
+                &self.status, &self.downloaded_size, &self.total_size
             ),
         }
     }
@@ -340,12 +358,12 @@ impl DownloadProxy {
     ///
     /// [`Download`]: ./struct.Download.html
     pub fn get_error(&self) -> Option<Arc<DownloadError>> {
-         self.download.lock().status.get_error()
+        self.download.lock().status.get_error()
     }
 
     /// Returns the current size of the downloaded file.
     pub fn get_downloaded_size(&self) -> u64 {
-         self.download.lock().get_downloaded_size()
+        self.download.lock().get_downloaded_size()
     }
 
     /// Returns the current download speed in byte/sec if the [`Download`] is running.
@@ -363,50 +381,63 @@ impl Display for DownloadProxy {
 }
 
 fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Download>>)
-    where U: reqwest::IntoUrl {
+where
+    U: reqwest::IntoUrl,
+{
     download.lock().status = DownloadStatus::Running;
 
     let url = match link.into_url() {
         Ok(url) => url,
         Err(err) => {
             fail_download(DownloadError::from(err), download);
-            return
-        },
+            return;
+        }
     };
 
-    let mut response =  match reqwest::get(url) {
+    let mut response = match reqwest::get(url) {
         Ok(resp) => resp,
         Err(err) => {
             fail_download(DownloadError::from(err), download);
-            return
-        },
+            return;
+        }
     };
 
     if !response.status().is_success() {
         // TODO: Custom error
-        fail_download(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput,
-            format!("{:?} status code.", response.status()))), download);
-        return
+        fail_download(
+            DownloadError::from(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{:?} status code.", response.status()),
+            )),
+            download,
+        );
+        return;
     }
 
-    if let Some(Ok(Ok(length))) = response
-        .headers()
-        .get(CONTENT_LENGTH)
-        .map(|con_len| {
-            con_len.to_str().map(|con_len_str| u64::from_str(con_len_str))
+    if let Some(Ok(Ok(length))) = response.headers().get(CONTENT_LENGTH).map(|con_len| {
+        con_len
+            .to_str()
+            .map(|con_len_str| u64::from_str(con_len_str))
     }) {
         download.lock().total_size = Some(length);
     }
     if output.is_dir() {
-        fail_download(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput,
-            format!("{:?} is a folder, not a file.", output))), download);
-        return
+        fail_download(
+            DownloadError::from(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{:?} is a folder, not a file.", output),
+            )),
+            download,
+        );
+        return;
     }
 
-    let parent_path = output.parent().expect("This cannot fail as the download path must point to a file.");
+    let parent_path = output
+        .parent()
+        .expect("This cannot fail as the download path must point to a file.");
     if let Err(err) = fs::create_dir_all(parent_path) {
         fail_download(DownloadError::from(err), download);
-        return
+        return;
     }
 
     let mut dl_file = match OpenOptions::new()
@@ -414,12 +445,13 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
         .write(true)
         .create(true)
         .append(false)
-        .open(output.as_path()) {
+        .open(output.as_path())
+    {
         Ok(file) => file,
         Err(err) => {
             fail_download(DownloadError::from(err), download);
-            return
-        },
+            return;
+        }
     };
     let mut buf = [0; 128 * 1024];
     let mut written = 0u64;
@@ -428,24 +460,24 @@ fn download_to_file<U>(link: U, output: Arc<PathBuf>, download: Arc<Mutex<Downlo
     loop {
         if let Ok(time) = t_start.elapsed() {
             if time >= DOWNLOAD_SPEED_INTERVAL {
-                    download.lock().speed = ((written - written_update) * 1_000_000_000_u64)
-                        as f64 / time.as_nanos() as f64;
-                    t_start = std::time::SystemTime::now();
-                    written_update = written;
+                download.lock().speed = ((written - written_update) * 1_000_000_000_u64) as f64
+                    / time.as_nanos() as f64;
+                t_start = std::time::SystemTime::now();
+                written_update = written;
             }
         }
         let length = match response.read(&mut buf) {
-            Ok(0) => break,  // EOF.
+            Ok(0) => break, // EOF.
             Ok(length) => length,
             Err(ref err) if err.kind() == io::ErrorKind::Interrupted => continue,
             Err(err) => {
                 fail_download(DownloadError::from(err), download);
-                return
-            },
+                return;
+            }
         };
         if let Err(err) = dl_file.write_all(&buf[..length]) {
             fail_download(DownloadError::from(err), download);
-            return
+            return;
         };
         written += length as u64;
         download.lock().downloaded_size = written;

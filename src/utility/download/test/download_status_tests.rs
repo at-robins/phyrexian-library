@@ -42,10 +42,15 @@ fn test_is_failed() {
 #[test]
 fn test_download_status_get_error() {
     let error_description = "This is a test error.";
-    let err = Arc::new(DownloadError::from(io::Error::new(io::ErrorKind::InvalidInput, error_description)));
+    let err = Arc::new(DownloadError::from(io::Error::new(
+        io::ErrorKind::InvalidInput,
+        error_description,
+    )));
     let status = DownloadStatus::Failed(Arc::clone(&err));
     match *status.get_error().expect("There must be an error.") {
-        DownloadError::IoError(ref err) if err.kind() == io::ErrorKind::InvalidInput && err.to_string() == error_description => {},
+        DownloadError::IoError(ref err)
+            if err.kind() == io::ErrorKind::InvalidInput
+                && err.to_string() == error_description => {}
         DownloadError::IoError(ref err) => panic!("{:?} is not the correct error.", err),
         DownloadError::ReqwestError(ref err) => panic!("{:?} is not the correct error.", err),
     }

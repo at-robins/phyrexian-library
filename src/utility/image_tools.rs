@@ -1,16 +1,16 @@
-//! The `image_tools` module contains various utility functions for 
+//! The `image_tools` module contains various utility functions for
 //! image manipulation.
 
 extern crate image;
 
-use std::num::NonZeroU32;
 use core::borrow::Borrow;
+use core::fmt::{Debug, Display};
 use image::GenericImageView;
-use core::fmt::{Display, Debug};
+use std::num::NonZeroU32;
 use SplitMode::*;
 
 #[derive(Debug, Hash, PartialEq, Eq, Default, Clone, Copy)]
-/// An point / pixel coordinate on an image.
+/// A point / pixel coordinate on an image.
 pub struct ImagePoint {
     /// The pixel on the x-axis corresponding to the width.
     x: u32,
@@ -20,33 +20,45 @@ pub struct ImagePoint {
 
 impl ImagePoint {
     /// Creates an `ImagePoint` from a x- and y-coordinate.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `x` - The x-coordinate.
     /// * `y` - The y-coordinate.
-    pub fn new<P>(x: P, y: P) -> Self where P: Borrow<u32>{
-        ImagePoint{x: *x.borrow(), y: *y.borrow()}
+    pub fn new<P>(x: P, y: P) -> Self
+    where
+        P: Borrow<u32>,
+    {
+        ImagePoint {
+            x: *x.borrow(),
+            y: *y.borrow(),
+        }
     }
-    
+
     /// Returns the x-coordinate of this point.
     pub fn x(self) -> u32 {
         self.x
     }
-    
+
     /// Returns the y-coordinate of this point.
     pub fn y(self) -> u32 {
         self.y
     }
 }
 
-impl<P> From<&(P, P)> for ImagePoint where P: Borrow<u32> {
+impl<P> From<&(P, P)> for ImagePoint
+where
+    P: Borrow<u32>,
+{
     fn from(point: &(P, P)) -> Self {
         ImagePoint::new(point.0.borrow(), point.1.borrow())
     }
 }
 
-impl<P> From<(P, P)> for ImagePoint where P: Borrow<u32> {
+impl<P> From<(P, P)> for ImagePoint
+where
+    P: Borrow<u32>,
+{
     fn from(point: (P, P)) -> Self {
         ImagePoint::new(point.0, point.1)
     }
@@ -64,35 +76,35 @@ impl Display for ImagePoint {
     }
 }
 
-/// The `SplitMode` enum contains all possible modes of splitting a image into 
+/// The `SplitMode` enum contains all possible modes of splitting a image into
 /// subimages of a defined size.
 //#[non_exhaustive]
 pub enum SplitMode {
-    /// A mode to producing overlapping sub images at the left and bottom edges 
+    /// A mode to producing overlapping sub images at the left and bottom edges
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapBottomLeftMode,
-    /// A mode to producing overlapping sub images at the right and bottom edges 
+    /// A mode to producing overlapping sub images at the right and bottom edges
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapBottomRightMode,
-    /// A mode to producing overlapping sub images at the left and top edges 
+    /// A mode to producing overlapping sub images at the left and top edges
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapTopLeftMode,
-    /// A mode to producing overlapping sub images at the right and top edges 
+    /// A mode to producing overlapping sub images at the right and top edges
     /// if there is no way of perfectly splitting the image.
     EdgeOverlapTopRightMode,
     /// A custom splitting mode.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// use std::num::NonZeroU32;
     /// use phyrexian_library::utility::image_tools::{SplitMode, SplitableImageExt};
     /// use image::DynamicImage;
-    /// 
-    /// let mode = SplitMode::CustomMode(Box::new(| 
-    ///    image_width, 
-    ///    image_height, 
-    ///    split_width, 
+    ///
+    /// let mode = SplitMode::CustomMode(Box::new(|
+    ///    image_width,
+    ///    image_height,
+    ///    split_width,
     ///    split_height
     /// | Vec::new()));
     /// let mut image = DynamicImage::new_rgba8(128, 128);
@@ -128,51 +140,64 @@ impl Display for SplitMode {
 }
 
 impl SplitMode {
-    /// Returns a vector of the upper left corners of all the sub-images to be 
+    /// Returns a vector of the upper left corners of all the sub-images to be
     /// generated.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `image_width` - The width of the  original image.
     /// * `image_height` - The height of the original image.
     /// * `split_width` - The width of the sub-images.
     /// * `split_height` - The height of the sub-images.
-    fn get_starts(&self, image_width: u32, image_height: u32, split_width: NonZeroU32, split_height: NonZeroU32) -> Vec<ImagePoint> {
+    fn get_starts(
+        &self,
+        image_width: u32,
+        image_height: u32,
+        split_width: NonZeroU32,
+        split_height: NonZeroU32,
+    ) -> Vec<ImagePoint> {
         match self {
             EdgeOverlapBottomLeftMode => combine_coordinates(
                 &split_range_align_start(image_width, split_width),
-                &split_range_align_end(image_height, split_height)
+                &split_range_align_end(image_height, split_height),
             ),
             EdgeOverlapBottomRightMode => combine_coordinates(
                 &split_range_align_end(image_width, split_width),
-                &split_range_align_end(image_height, split_height)
+                &split_range_align_end(image_height, split_height),
             ),
             EdgeOverlapTopLeftMode => combine_coordinates(
                 &split_range_align_start(image_width, split_width),
-                &split_range_align_start(image_height, split_height)
+                &split_range_align_start(image_height, split_height),
             ),
             EdgeOverlapTopRightMode => combine_coordinates(
                 &split_range_align_end(image_width, split_width),
-                &split_range_align_start(image_height, split_height)
+                &split_range_align_start(image_height, split_height),
             ),
-            CustomMode(custom_function) => custom_function(image_width, image_height, split_width, split_height),
+            CustomMode(custom_function) => {
+                custom_function(image_width, image_height, split_width, split_height)
+            }
         }
     }
 }
 
 impl Default for SplitMode {
-    fn default() -> Self { EdgeOverlapBottomRightMode }
+    fn default() -> Self {
+        EdgeOverlapBottomRightMode
+    }
 }
 
-pub trait SplitableImageExt where Self: image::GenericImage + Sized {
+pub trait SplitableImageExt
+where
+    Self: image::GenericImage + Sized,
+{
     fn split_into(&mut self, width: NonZeroU32, height: NonZeroU32, mode: SplitMode) -> Vec<Self>;
 }
 
 impl SplitableImageExt for image::DynamicImage {
     /// Splits the image into sub-images of the specified dimension.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `width` - The width of the sub-images.
     /// * `height` - The height of the sub-images.
     /// * `SplitMode` - The mode of image splitting.
@@ -180,7 +205,8 @@ impl SplitableImageExt for image::DynamicImage {
         let (width_u, height_u) = (width.get(), height.get());
         // Only split images if the image can be split.
         if self.height() >= height_u && self.width() >= width_u {
-            mode.get_starts(self.width(), self.height(), width, height).iter()
+            mode.get_starts(self.width(), self.height(), width, height)
+                .iter()
                 .map(|start| self.crop(start.x(), start.y(), width_u, height_u))
                 .collect()
         } else {
@@ -191,23 +217,21 @@ impl SplitableImageExt for image::DynamicImage {
 
 /// Splits the specified range into parts of the defined length.
 /// Overlapping may happen at the end of the range.
-/// 
+///
 /// If the defined `split` length is longer than the `original` range an
 /// empty vector is returned.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `original` - A number representing a continous range.
-/// * `split` - The length of the parts to split the specified range into. 
+/// * `split` - The length of the parts to split the specified range into.
 /// this cannot be zero.
 fn split_range_align_end(original: u32, split: NonZeroU32) -> Vec<u32> {
     let split = split.get();
     if original < split {
         Vec::new()
     } else {
-        let mut range: Vec<u32> = (0..(original / split))
-            .map(|h| h * split)
-            .collect();
+        let mut range: Vec<u32> = (0..(original / split)).map(|h| h * split).collect();
         if original % split != 0 {
             range.push(original - split);
         }
@@ -217,14 +241,14 @@ fn split_range_align_end(original: u32, split: NonZeroU32) -> Vec<u32> {
 
 /// Splits the specified range into parts of the defined length.
 /// Overlapping may happen at the start of the range.
-/// 
+///
 /// If the defined `split` length is longer than the `original` range an
 /// empty vector is returned.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `original` - A number representing a continous range.
-/// * `split` - The length of the parts to split the specified range into. 
+/// * `split` - The length of the parts to split the specified range into.
 /// this cannot be zero.
 fn split_range_align_start(original: u32, split: NonZeroU32) -> Vec<u32> {
     let split = split.get();
@@ -243,26 +267,27 @@ fn split_range_align_start(original: u32, split: NonZeroU32) -> Vec<u32> {
     }
 }
 
-/// Combines the coordinates into [`ImagePoint`]s by forming every 
+/// Combines the coordinates into [`ImagePoint`]s by forming every
 /// possible x-y-pair.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `x_coordinates` - A list of x-coordinates.
 /// * `y_coordinates` - A list of y-coordinates.
-/// 
+///
 /// [`ImagePoint`]: ./struct.ImagePoint.html
 fn combine_coordinates(x_coordinates: &[u32], y_coordinates: &[u32]) -> Vec<ImagePoint> {
-    x_coordinates.iter()
+    x_coordinates
+        .iter()
         .flat_map(|x| y_coordinates.iter().map(move |y| ImagePoint::new(x, y)))
         .collect()
 }
 
 #[cfg(test)]
 mod tests {
-    
+
     use super::*;
-    
+
     #[test]
     fn test_image_point() {
         let x = 465;
@@ -273,44 +298,82 @@ mod tests {
         // Test getting the y-coordinate.
         assert_eq!(point.y(), y);
     }
-    
+
     #[test]
     fn test_split_align_start() {
         // Test zero input length.
-        assert_eq!(split_range_align_start(0, NonZeroU32::new(12).unwrap()), Vec::<u32>::new());
+        assert_eq!(
+            split_range_align_start(0, NonZeroU32::new(12).unwrap()),
+            Vec::<u32>::new()
+        );
         // Test input length smaller than split length.
-        assert_eq!(split_range_align_start(364, NonZeroU32::new(2490).unwrap()), Vec::<u32>::new());
+        assert_eq!(
+            split_range_align_start(364, NonZeroU32::new(2490).unwrap()),
+            Vec::<u32>::new()
+        );
         // Test normal behaviour without overlap.
-        assert_eq!(split_range_align_start(50000, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000));
+        assert_eq!(
+            split_range_align_start(50000, NonZeroU32::new(10000).unwrap()),
+            vec!(0, 10000, 20000, 30000, 40000)
+        );
         // Test normal behaviour with overlap.
-        assert_eq!(split_range_align_start(50067, NonZeroU32::new(10000).unwrap()), vec!(0,67,10067,20067,30067,40067));
+        assert_eq!(
+            split_range_align_start(50067, NonZeroU32::new(10000).unwrap()),
+            vec!(0, 67, 10067, 20067, 30067, 40067)
+        );
     }
-    
+
     #[test]
     fn test_split_align_end() {
         // Test zero input length.
-        assert_eq!(split_range_align_end(0, NonZeroU32::new(12).unwrap()), Vec::<u32>::new());
+        assert_eq!(
+            split_range_align_end(0, NonZeroU32::new(12).unwrap()),
+            Vec::<u32>::new()
+        );
         // Test input length smaller than split length.
-        assert_eq!(split_range_align_end(364, NonZeroU32::new(2490).unwrap()), Vec::<u32>::new());
+        assert_eq!(
+            split_range_align_end(364, NonZeroU32::new(2490).unwrap()),
+            Vec::<u32>::new()
+        );
         // Test normal behaviour without overlap.
-        assert_eq!(split_range_align_end(50000, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000));
+        assert_eq!(
+            split_range_align_end(50000, NonZeroU32::new(10000).unwrap()),
+            vec!(0, 10000, 20000, 30000, 40000)
+        );
         // Test normal behaviour with overlap.
-        assert_eq!(split_range_align_end(50067, NonZeroU32::new(10000).unwrap()), vec!(0,10000,20000,30000,40000,40067));
+        assert_eq!(
+            split_range_align_end(50067, NonZeroU32::new(10000).unwrap()),
+            vec!(0, 10000, 20000, 30000, 40000, 40067)
+        );
     }
-    
+
     #[test]
     fn test_combine_coordinates() {
-        let x = vec!(7, 24987, 78);
-        let y = vec!(12, 943, 44944);
+        let x = vec![7, 24987, 78];
+        let y = vec![12, 943, 44944];
         // Test empty height input.
-        assert_eq!(combine_coordinates(&Vec::new(), &y), Vec::<ImagePoint>::new());
+        assert_eq!(
+            combine_coordinates(&Vec::new(), &y),
+            Vec::<ImagePoint>::new()
+        );
         // Test empty width input.
-        assert_eq!(combine_coordinates(&x, &Vec::new()), Vec::<ImagePoint>::new());
+        assert_eq!(
+            combine_coordinates(&x, &Vec::new()),
+            Vec::<ImagePoint>::new()
+        );
         let combined_assertion = [
-            (7, 12), (7, 943), (7, 44944),
-            (24987, 12), (24987, 943), (24987, 44944),
-            (78, 12), (78, 943), (78, 44944)
-        ].iter().map(ImagePoint::from);
+            (7, 12),
+            (7, 943),
+            (7, 44944),
+            (24987, 12),
+            (24987, 943),
+            (24987, 44944),
+            (78, 12),
+            (78, 943),
+            (78, 44944),
+        ]
+        .iter()
+        .map(ImagePoint::from);
         // Check if every element is present without caring for the order of elements.
         let combined_result = combine_coordinates(&x, &y);
         assert_eq!(combined_assertion.len(), combined_result.len());
@@ -319,4 +382,3 @@ mod tests {
         }
     }
 }
-
