@@ -5,6 +5,7 @@ authors = ["at-robins"]
 edition = "2018"
 
 [dependencies]
+clap = "2.33.0"
 image = "0.22.3"
 parking_lot = "0.11"
 rayon = "1.2"
