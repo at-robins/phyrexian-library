@@ -4,7 +4,6 @@
 extern crate parking_lot;
 extern crate rayon;
 extern crate reqwest;
-extern crate serde_json;
 
 use parking_lot::Mutex;
 use rayon::{ThreadPool, ThreadPoolBuildError, ThreadPoolBuilder};
