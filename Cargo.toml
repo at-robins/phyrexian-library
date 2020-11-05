@@ -5,8 +5,9 @@ authors = ["at-robins"]
 edition = "2018"
 
 [dependencies]
-clap = "2.33"
+clap = "3.0.0-beta.2"
 image = "0.23"
 parking_lot = "0.11"
 rayon = "1.5"
 reqwest = "0.9"
+rusqlite = {version = "0.24", features = ["bundled"]}
