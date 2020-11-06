@@ -261,3 +261,15 @@ impl fmt::Display for LocalisedString {
         write!(f, "[{}]", string)
     }
 }
+
+impl From<String> for LocalisedString {
+    fn from(value: String) -> Self {
+        LocalisedString::new(value)
+    }
+}
+
+impl From<&str> for LocalisedString {
+    fn from(value: &str) -> Self {
+        LocalisedString::new(value)
+    }
+}
