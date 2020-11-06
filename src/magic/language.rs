@@ -1,3 +1,6 @@
+//! The 'language' module provides structures for localisation.
+
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -133,5 +136,128 @@ impl TryFrom<String> for Language {
 impl fmt::Display for Language {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.into())
+    }
+}
+
+/// A localised string.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalisedString {
+    content: HashMap<Language, String>,
+}
+
+impl LocalisedString {
+    /// Creates a new localised string.
+    ///
+    /// # Parameters
+    ///
+    /// * default - the string in the default ['Language'].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use phyrexian_library::magic::language::LocalisedString;
+    ///
+    /// let default = "Default";
+    /// let localised = LocalisedString::new(default.to_string());
+    /// assert_eq!(default, localised.get_default());
+    /// ```
+    ///
+    /// ['Language']: ./enum.Language.html
+    pub fn new<T: Into<String>>(default: T) -> Self {
+        let mut content = HashMap::new();
+        content.insert(Language::default(), default.into());
+        Self{content}
+    }
+
+    /// Sets the string in the specified ['Language'] and returns the prevoiusly set
+    /// string if any.
+    ///
+    /// # Parameters
+    ///
+    /// * language - the ['Language'] to set the string in
+    /// * value - value of the string
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use phyrexian_library::magic::language::{Language, LocalisedString};
+    ///
+    /// let default = "Default";
+    /// let mut localised = LocalisedString::new(default.to_string());
+    /// let new_default = "New";
+    /// assert_eq!(Some(default.to_string()), localised.set(Language::default(), new_default.to_string()));
+    /// assert_eq!(new_default, localised.get_default());
+    /// ```
+    /// ```
+    /// use phyrexian_library::magic::language::{Language, LocalisedString};
+    ///
+    /// let default = "Default";
+    /// let mut localised = LocalisedString::new(default.to_string());
+    /// let german = "Irgendetwas";
+    /// assert_eq!(None, localised.get_localised(Language::German));
+    /// assert_eq!(None, localised.set(Language::German, german.to_string()));
+    /// assert_eq!(Some(german), localised.get_localised(Language::German));
+    /// ```
+    ///
+    /// ['Language']: ./enum.Language.html
+    pub fn set<T: Into<String>>(&mut self, language: Language, value: T) -> Option<String> {
+        self.content.insert(language, value.into())
+    }
+
+    /// Returns the string in the default ['Language'].
+    ///
+    /// ['Language']: ./enum.Language.html
+    pub fn get_default(&self) -> &str {
+        self.content
+            .get(&Language::default())
+            .expect("There must be a default value.")
+    }
+
+    /// Returns the string in the specified ['Language'] if set.
+    ///
+    /// # Parameters
+    ///
+    /// * language - the ['Language'] to get the string in
+    ///
+    /// ['Language']: ./enum.Language.html
+    pub fn get_localised(&self, language: Language) -> Option<&str> {
+        self.content
+            .get(&language)
+            .map(|value| value.as_str())
+    }
+
+    /// Returns the string in the specified ['Language'] if set,
+    /// otherwise returns the default.
+    ///
+    /// # Parameters
+    ///
+    /// * language - the ['Language'] to get the string in
+    ///
+    /// ```
+    /// use phyrexian_library::magic::language::{Language, LocalisedString};
+    ///
+    /// let default = "Default";
+    /// let mut localised = LocalisedString::new(default.to_string());
+    /// let german = "Irgendetwas";
+    /// assert_eq!(default, localised.get_localised_or_default(Language::German));
+    /// assert_eq!(None, localised.set(Language::German, german.to_string()));
+    /// assert_eq!(german, localised.get_localised_or_default(Language::German));
+    /// ```
+    ///
+    /// ['Language']: ./enum.Language.html
+    pub fn get_localised_or_default(&self, language: Language) -> &str {
+        self.content
+            .get(&language)
+            .map_or(self.get_default(), |value| value.as_str())
+    }
+}
+
+impl fmt::Display for LocalisedString {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let string = self.content.iter()
+            .map(|(language, value)| format!("{}: \"{}\"", language, value))
+            .collect::<Vec<String>>()
+            .join(", ");
+        write!(f, "[{}]", string)
     }
 }
