@@ -1,5 +1,9 @@
 //! The 'rarity' module provides structures for card rarity classification.
 
+extern crate serde;
+
+use serde::{Serialize, Deserialize};
+use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
 
@@ -9,8 +13,8 @@ const RARITY_UNCOMMON: &str = "uncommon";
 const RARITY_RARE: &str = "rare";
 const RARITY_MYTHIC: &str = "mythic";
 
-/// The 'Rarity' of a Magic: The Gathering product.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// The 'Rarity' of a Magic card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Rarity {
     Common,
     Uncommon,
@@ -18,9 +22,33 @@ pub enum Rarity {
     Mythic,
 }
 
+impl Rarity {
+    /// Returns a number for ordering of rarities.
+    fn ordering_number(&self) -> u8 {
+        match self {
+            Rarity::Common => 0,
+            Rarity::Uncommon => 1,
+            Rarity::Rare => 2,
+            Rarity::Mythic => 3,
+        }
+    }
+}
+
 impl Default for Rarity {
     fn default() -> Self {
         Rarity::Common
+    }
+}
+
+impl PartialOrd for Rarity {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Rarity {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.ordering_number().cmp(&other.ordering_number())
     }
 }
 
@@ -68,3 +96,6 @@ impl fmt::Display for Rarity {
         f.write_str(self.into())
     }
 }
+
+#[cfg(test)]
+mod test;
