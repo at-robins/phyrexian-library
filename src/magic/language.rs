@@ -1,5 +1,8 @@
 //! The 'language' module provides structures for localisation.
 
+extern crate serde;
+
+use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -23,8 +26,8 @@ const LANGUAGE_RUSSIAN: &str = "Russian";
 const LANGUAGE_SANSKRIT: &str = "Sanskrit";
 const LANGUAGE_SPANISH: &str = "Spanish";
 
-/// The 'Language' of a Magic: The Gathering product.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+/// The 'Language' of a Magic card.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Language {
     /// Ancient greek.
     AncientGreek,
@@ -140,7 +143,7 @@ impl fmt::Display for Language {
 }
 
 /// A localised string.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalisedString {
     content: HashMap<Language, String>,
 }
