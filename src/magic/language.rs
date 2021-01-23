@@ -301,3 +301,6 @@ impl From<&str> for LocalisedString {
         LocalisedString::new(value)
     }
 }
+
+#[cfg(test)]
+mod test;
