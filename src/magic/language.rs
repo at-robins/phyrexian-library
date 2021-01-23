@@ -3,6 +3,7 @@
 extern crate serde;
 
 use serde::{Serialize, Deserialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
@@ -136,6 +137,18 @@ impl TryFrom<String> for Language {
     }
 }
 
+impl PartialOrd for Language {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Language {
+    fn cmp(&self, other: &Self) -> Ordering {
+        Into::<&str>::into(self).cmp(&Into::<&str>::into(other))
+    }
+}
+
 impl fmt::Display for Language {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.into())
@@ -252,6 +265,18 @@ impl LocalisedString {
         self.content
             .get(&language)
             .map_or(self.get_default(), |value| value.as_str())
+    }
+}
+
+impl PartialOrd for LocalisedString {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for LocalisedString {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.get_default().cmp(&other.get_default())
     }
 }
 
