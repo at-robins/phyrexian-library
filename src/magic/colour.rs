@@ -339,6 +339,7 @@ impl fmt::Display for ColourSet {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// A type of `Mana`.
 pub enum Mana {
     Coloured(Colour),
@@ -514,6 +515,7 @@ impl fmt::Display for Mana {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// The mana cost of a card.
 pub struct ManaCost {
     mana: Vec<Mana>,

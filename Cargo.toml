@@ -6,6 +6,8 @@ edition = "2018"
 
 [dependencies]
 clap = "3.0.0-beta.2"
+derive_builder = "0.9"
+getset = "0.1"
 image = "0.23"
 parking_lot = "0.11"
 rayon = "1.5"
