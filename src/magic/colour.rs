@@ -1,5 +1,8 @@
 //! The 'colour' module provides structures for card colour classification.
 
+extern crate serde;
+
+use serde::{Serialize, Deserialize};
 use std::borrow::Borrow;
 use std::collections::HashSet;
 use std::cmp::Ordering;
@@ -30,7 +33,7 @@ const GENERIC_MANA_VARIABLE: [&str; 3] = ["X", "Y", "Z"];
 
 
 /// The 'Colour' of a Magic product.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Colour {
     Black,
     Blue,
@@ -101,7 +104,7 @@ impl fmt::Display for Colour {
 }
 
 /// A set of ['Colour'](phyrexian_library::magic::colour::Colour)s.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ColourSet {
     colours: HashSet<Colour>,
 }
@@ -221,13 +224,13 @@ impl ColourSet {
     /// use phyrexian_library::magic::colour::{Colour, ColourSet};
     ///
     /// let mut superset = ColourSet::new();
+    /// let mut subset = ColourSet::new();
     /// superset.add(Colour::Black);
     /// superset.add(Colour::Blue);
     /// subset.add(Colour::Black);
-    /// assert!(!colours.is_monocoloured());
-    /// assert!(colours.is_monocoloured());
-    /// colours.add(Colour::Blue);
-    /// assert!(!colours.is_monocoloured());
+    /// assert!(superset.is_subset(&subset));
+    /// subset.add(Colour::Green);
+    /// assert!(!superset.is_subset(&subset));
     /// ```
     pub fn is_subset<T: Borrow<ColourSet>>(&self, colours: T) -> bool {
         let mut result = true;
@@ -339,7 +342,7 @@ impl fmt::Display for ColourSet {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// A type of `Mana`.
 pub enum Mana {
     Coloured(Colour),
@@ -515,7 +518,7 @@ impl fmt::Display for Mana {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// The mana cost of a card.
 pub struct ManaCost {
     mana: Vec<Mana>,
@@ -537,6 +540,77 @@ impl ManaCost {
     }
 }
 
+impl From<ManaCost> for String {
+    fn from(mana_cost: ManaCost) -> Self {
+        format!("{}", mana_cost)
+    }
+}
+
+impl From<&ManaCost> for String {
+    fn from(mana_cost: &ManaCost) -> Self {
+        format!("{}", mana_cost)
+    }
+}
+
+impl TryFrom<&str> for ManaCost {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let mut manas = Vec::new();
+        let mut errors: Vec<String> = Vec::new();
+        for mana in split_mana_string(value) {
+            match std::convert::TryInto::<Mana>::try_into(mana) {
+                Ok(m) => manas.push(m),
+                Err(e) => errors.push(e),
+            }
+        }
+        if errors.is_empty() {
+            Ok(ManaCost::new(manas))
+        } else {
+            let error_string = errors.join("\n[Cause]: ");
+            Err(format!("{} is not a valid mana cost.\n[Cause]: {}", value, error_string))
+        }
+    }
+}
+
+/// Splits a string of `Mana`(Mana) string representation. This function does not validate
+/// the potential mana strings. It also keeps possible remainders.
+///
+/// # Parameters
+///
+/// * `value` - the mana string to split
+fn split_mana_string(value: &str) -> Vec<&str> {
+    if value.is_empty() {
+        return vec!(value);
+    }
+    let mut mana = Vec::new();
+    let mut remaining = value;
+    loop {
+        if let Some(index) = remaining.find(MANA_SPECIFIER_END) {
+            if index == remaining.len() - 1 {
+                mana.push(remaining);
+                break;
+            } else {
+                let split = remaining.split_at(index + 1);
+                mana.push(split.0);
+                remaining = split.1;
+            }
+        } else {
+            mana.push(remaining);
+            break;
+        }
+    }
+    mana
+}
+
+impl TryFrom<String> for ManaCost {
+    type Error = String;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        TryFrom::<&str>::try_from(&value)
+    }
+}
+
 impl fmt::Display for ManaCost {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut s = String::new();
@@ -549,7 +623,7 @@ impl fmt::Display for ManaCost {
 }
 
 /// The `GenericCost` enum defines types of generic mana costs.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum GenericCost {
     Infinity,
     Half,
@@ -650,3 +724,6 @@ impl fmt::Display for GenericCost {
         f.write_str(&String::from(self))
     }
 }
+
+#[cfg(test)]
+mod test;
