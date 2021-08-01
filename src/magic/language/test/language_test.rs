@@ -85,3 +85,25 @@ fn test_conversion_from_string() {
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SANSKRIT.to_string()), Ok(Language::Sanskrit));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SPANISH.to_string()), Ok(Language::Spanish));
 }
+
+#[test]
+/// Tests if the conversion from `Language` to ilanguage code string works as expected.
+fn test_conversion_to_code() {
+    assert_eq!(Language::AncientGreek.code(), "grc");
+    assert_eq!(Language::Arabic.code(), "ar");
+    assert_eq!(Language::ChineseSimplified.code(), "zhs");
+    assert_eq!(Language::ChineseTraditional.code(), "zht");
+    assert_eq!(Language::EnglishAmerican.code(), "en");
+    assert_eq!(Language::French.code(), "fr");
+    assert_eq!(Language::German.code(), "de");
+    assert_eq!(Language::Hebrew.code(), "he");
+    assert_eq!(Language::Italian.code(), "it");
+    assert_eq!(Language::Japanese.code(), "ja");
+    assert_eq!(Language::Korean.code(), "ko");
+    assert_eq!(Language::Latin.code(), "la");
+    assert_eq!(Language::Phyrexian.code(), "ph");
+    assert_eq!(Language::PortugueseBrazil.code(), "pt");
+    assert_eq!(Language::Russian.code(), "ru");
+    assert_eq!(Language::Sanskrit.code(), "sa");
+    assert_eq!(Language::Spanish.code(), "es");
+}

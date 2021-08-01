@@ -66,6 +66,31 @@ pub enum Language {
     Spanish,
 }
 
+impl Language {
+    /// Returns the language code.
+    pub fn code(&self) -> &str {
+        match self {
+            Language::AncientGreek => "grc",
+            Language::Arabic => "ar",
+            Language::ChineseSimplified => "zhs",
+            Language::ChineseTraditional => "zht",
+            Language::EnglishAmerican => "en",
+            Language::French => "fr",
+            Language::German => "de",
+            Language::Hebrew => "he",
+            Language::Italian => "it",
+            Language::Japanese => "ja",
+            Language::Korean => "ko",
+            Language::Latin => "la",
+            Language::Phyrexian => "ph",
+            Language::PortugueseBrazil => "pt",
+            Language::Russian => "ru",
+            Language::Sanskrit => "sa",
+            Language::Spanish => "es",
+        }
+    }
+}
+
 impl Default for Language {
     fn default() -> Self {
         Language::EnglishAmerican
