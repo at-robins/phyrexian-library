@@ -291,6 +291,15 @@ impl LocalisedString {
             .get(&language)
             .map_or(self.get_default(), |value| value.as_str())
     }
+
+    /// Checks if any of the localisation contains the specified pattern.
+    /// 
+    /// # Parameters
+    /// 
+    /// * `pattern` - the pattern to match
+    pub fn any_contains(&self, pattern: &str) -> bool {
+        self.content.values().any(|value| value.contains(pattern))
+    }
 }
 
 impl PartialOrd for LocalisedString {

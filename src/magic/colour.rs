@@ -350,6 +350,7 @@ pub enum Mana {
     Generic(GenericCost),
     MonoHybrid(Colour),
     DualHybrid(Colour, Colour),
+    DualHybridPhyrexian(Colour, Colour),
     Snow,
     Phyrexian(Colour),
     Half(Colour),
@@ -364,6 +365,7 @@ impl Mana {
             Mana::Generic(gen) => gen.converted_mana_cost(),
             Mana::MonoHybrid(_) => 2.0,
             Mana::DualHybrid(_,_) => 1.0,
+            Mana::DualHybridPhyrexian(_,_) => 1.0,
             Mana::Snow => 1.0,
             Mana::Phyrexian(_) => 1.0,
             Mana::Half(_) => 0.5,
@@ -429,6 +431,21 @@ impl Mana {
         }
     }
 
+    /// Tries to convert a string without specifiers into dual hybrid phyrexian mana.
+    ///
+    /// # Parameters
+    ///
+    /// * `value` - the string to convert
+    fn into_dual_hybrid_phyrexian(value: &str) -> Option<Mana> {
+        value.strip_suffix(MANA_PHYREXIAN).and_then(Mana::into_dual_hybrid).and_then(|dual| {
+            if let Mana::DualHybrid(a, b) = dual {
+                Some(Mana::DualHybridPhyrexian(a, b))
+            } else {
+                None
+            }
+        })
+    }
+
     /// Tries to convert a string without specifiers into phyrexian mana.
     ///
     /// # Parameters
@@ -486,6 +503,7 @@ impl TryFrom<&str> for Mana {
                     .or(Mana::into_generic(inner))
                     .or(Mana::into_mono_hybrid(inner))
                     .or(Mana::into_dual_hybrid(inner))
+                    .or(Mana::into_dual_hybrid_phyrexian(inner))
                     .or(Mana::into_snow(inner))
                     .or(Mana::into_phyrexian(inner))
                     .or(Mana::into_half(inner))
@@ -510,6 +528,7 @@ impl fmt::Display for Mana {
             Mana::Generic(amount) => amount.into(),
             Mana::MonoHybrid(colour) => format!("{}{}", MANA_MONO_HYBRID, colour),
             Mana::DualHybrid(colour_a,colour_b) => format!("{}{}{}", colour_a, MANA_DUAL_HYBRID, colour_b),
+            Mana::DualHybridPhyrexian(colour_a,colour_b) => format!("{}{}{}{}", colour_a, MANA_DUAL_HYBRID, colour_b, MANA_PHYREXIAN),
             Mana::Snow => MANA_SNOW.to_string(),
             Mana::Phyrexian(colour) => format!("{}{}", colour, MANA_PHYREXIAN),
             Mana::Half(colour) => format!("{}{}", MANA_HALF, colour),

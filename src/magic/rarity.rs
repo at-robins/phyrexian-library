@@ -12,6 +12,8 @@ const RARITY_COMMON: &str = "common";
 const RARITY_UNCOMMON: &str = "uncommon";
 const RARITY_RARE: &str = "rare";
 const RARITY_MYTHIC: &str = "mythic";
+const RARITY_SPECIAL: &str = "special";
+const RARITY_BONUS: &str = "bonus";
 
 /// The 'Rarity' of a Magic card.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -20,6 +22,8 @@ pub enum Rarity {
     Uncommon,
     Rare,
     Mythic,
+    Special,
+    Bonus,
 }
 
 impl Rarity {
@@ -30,6 +34,8 @@ impl Rarity {
             Rarity::Uncommon => 1,
             Rarity::Rare => 2,
             Rarity::Mythic => 3,
+            Rarity::Special => 4,
+            Rarity::Bonus => 5,
         }
     }
 }
@@ -65,6 +71,8 @@ impl From<&Rarity> for &str {
             Rarity::Uncommon => RARITY_UNCOMMON,
             Rarity::Rare => RARITY_RARE,
             Rarity::Mythic => RARITY_MYTHIC,
+            Rarity::Special => RARITY_SPECIAL,
+            Rarity::Bonus => RARITY_BONUS,
         }
     }
 }
@@ -78,6 +86,8 @@ impl TryFrom<&str> for Rarity {
             RARITY_UNCOMMON => Ok(Rarity::Uncommon),
             RARITY_RARE => Ok(Rarity::Rare),
             RARITY_MYTHIC => Ok(Rarity::Mythic),
+            RARITY_SPECIAL => Ok(Rarity::Special),
+            RARITY_BONUS => Ok(Rarity::Bonus),
             _ => Err(format!("{} is not a valid rarity.", value)),
         }
     }
