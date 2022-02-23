@@ -166,8 +166,12 @@ impl CardSet {
 
     /// Writes this `Set` to a file.
     pub fn save(&self) -> Result<(), PhyrexianError> {
-        let file = File::create(Configuration::set_file_path(self))?;
-        serde_json::to_writer_pretty(file, self)?;
+        let path = Configuration::set_file_path(self);
+        if let Some(parent_path) = path.parent() {
+            std::fs::create_dir_all(parent_path)?;
+        }
+        let file = File::create(path)?;
+        bincode::serialize_into(file, &self)?;
         Ok(())
     }
 }

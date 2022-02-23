@@ -7,7 +7,7 @@ const DEFAULT_FOLDER_RESOURCE_SET: &str = "sets";
 /// The name of the default database.
 const DEFAULT_DATABASE_NAME: &str = "AllPrintings";
 /// The file extension for a set.
-const EXTENSION_SET: &str = "mtgset";
+pub const EXTENSION_SET: &str = "mtgset";
 /// The file extension of a JSON.
 const EXTENSION_JSON: &str = "json";
 

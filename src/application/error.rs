@@ -17,6 +17,18 @@ impl From<serde_json::error::Error> for PhyrexianError {
     }
 }
 
+impl From<bincode::ErrorKind> for PhyrexianError {
+    fn from(error: bincode::ErrorKind) -> Self {
+        PhyrexianError::ConversionError(error.to_string())
+    }
+}
+
+impl From<Box<bincode::ErrorKind>> for PhyrexianError {
+    fn from(error: Box<bincode::ErrorKind>) -> Self {
+        (*error).into()
+    }
+}
+
 impl From<std::io::Error> for PhyrexianError {
     fn from(error: std::io::Error) -> Self {
         PhyrexianError::IOError(error.to_string())
