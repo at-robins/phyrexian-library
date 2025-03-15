@@ -40,6 +40,7 @@ fn test_conversion_to_string() {
     assert_eq!(Into::<&str>::into(Language::Latin), LANGUAGE_LATIN);
     assert_eq!(Into::<&str>::into(Language::Phyrexian), LANGUAGE_PHYREXIAN);
     assert_eq!(Into::<&str>::into(Language::PortugueseBrazil), LANGUAGE_PORTUGUESE_BRAZIL);
+    assert_eq!(Into::<&str>::into(Language::Quenya), LANGUAGE_QUENYA);
     assert_eq!(Into::<&str>::into(Language::Russian), LANGUAGE_RUSSIAN);
     assert_eq!(Into::<&str>::into(Language::Sanskrit), LANGUAGE_SANSKRIT);
     assert_eq!(Into::<&str>::into(Language::Spanish), LANGUAGE_SPANISH);
@@ -63,6 +64,7 @@ fn test_conversion_from_string() {
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_LATIN), Ok(Language::Latin));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_PHYREXIAN), Ok(Language::Phyrexian));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_PORTUGUESE_BRAZIL), Ok(Language::PortugueseBrazil));
+    assert_eq!(TryInto::<Language>::try_into(LANGUAGE_QUENYA), Ok(Language::Quenya));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_RUSSIAN), Ok(Language::Russian));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SANSKRIT), Ok(Language::Sanskrit));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SPANISH), Ok(Language::Spanish));
@@ -82,6 +84,7 @@ fn test_conversion_from_string() {
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_PHYREXIAN.to_string()), Ok(Language::Phyrexian));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_PORTUGUESE_BRAZIL.to_string()), Ok(Language::PortugueseBrazil));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_RUSSIAN.to_string()), Ok(Language::Russian));
+    assert_eq!(TryInto::<Language>::try_into(LANGUAGE_QUENYA.to_string()), Ok(Language::Quenya));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SANSKRIT.to_string()), Ok(Language::Sanskrit));
     assert_eq!(TryInto::<Language>::try_into(LANGUAGE_SPANISH.to_string()), Ok(Language::Spanish));
 }
@@ -103,6 +106,7 @@ fn test_conversion_to_code() {
     assert_eq!(Language::Latin.code(), "la");
     assert_eq!(Language::Phyrexian.code(), "ph");
     assert_eq!(Language::PortugueseBrazil.code(), "pt");
+    assert_eq!(Language::Quenya.code(), "qya");
     assert_eq!(Language::Russian.code(), "ru");
     assert_eq!(Language::Sanskrit.code(), "sa");
     assert_eq!(Language::Spanish.code(), "es");

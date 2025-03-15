@@ -23,6 +23,7 @@ const LANGUAGE_KOREAN: &str = "Korean";
 const LANGUAGE_LATIN: &str = "Latin";
 const LANGUAGE_PHYREXIAN: &str = "Phyrexian";
 const LANGUAGE_PORTUGUESE_BRAZIL: &str = "Portuguese (Brazil)";
+const LANGUAGE_QUENYA: &str = "Quenya";
 const LANGUAGE_RUSSIAN: &str = "Russian";
 const LANGUAGE_SANSKRIT: &str = "Sanskrit";
 const LANGUAGE_SPANISH: &str = "Spanish";
@@ -58,6 +59,8 @@ pub enum Language {
     Phyrexian,
     /// Brasilian portuguese.
     PortugueseBrazil,
+    /// Quenya.
+    Quenya,
     /// Russian.
     Russian,
     /// Sanskrit.
@@ -84,6 +87,7 @@ impl Language {
             Language::Latin => "la",
             Language::Phyrexian => "ph",
             Language::PortugueseBrazil => "pt",
+            Language::Quenya => "qya",
             Language::Russian => "ru",
             Language::Sanskrit => "sa",
             Language::Spanish => "es",
@@ -120,6 +124,7 @@ impl From<&Language> for &str {
             Language::Latin => LANGUAGE_LATIN,
             Language::Phyrexian => LANGUAGE_PHYREXIAN,
             Language::PortugueseBrazil => LANGUAGE_PORTUGUESE_BRAZIL,
+            Language::Quenya => LANGUAGE_QUENYA,
             Language::Russian => LANGUAGE_RUSSIAN,
             Language::Sanskrit => LANGUAGE_SANSKRIT,
             Language::Spanish => LANGUAGE_SPANISH,
@@ -146,6 +151,7 @@ impl TryFrom<&str> for Language {
             LANGUAGE_LATIN => Ok(Language::Latin),
             LANGUAGE_PHYREXIAN => Ok(Language::Phyrexian),
             LANGUAGE_PORTUGUESE_BRAZIL => Ok(Language::PortugueseBrazil),
+            LANGUAGE_QUENYA => Ok(Language::Quenya),
             LANGUAGE_RUSSIAN => Ok(Language::Russian),
             LANGUAGE_SANSKRIT => Ok(Language::Sanskrit),
             LANGUAGE_SPANISH => Ok(Language::Spanish),
